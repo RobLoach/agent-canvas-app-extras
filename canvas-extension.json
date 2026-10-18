@@ -3,6 +3,6 @@
   "name": "agent-canvas-app-extras",
   "display_name": "Extras",
   "version": "0.1.0",
-  "description": "Extra Agent Canvas tweaks, starting with a Wide Canvas chat layout.",
+  "description": "Wide chat layout, agent status as the browser's icon, and desktop notifications, and other extras.",
   "entrypoint": "extension.js"
 }
