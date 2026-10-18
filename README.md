@@ -12,7 +12,10 @@ An [OpenHands](https://www.openhands.dev/) Agent Canvas app which adds a few ext
 
 1. Visit **Customize > Apps**
 2. Click on **Add app**
-3. For the App source, enter `github:robloach/agent-canvas-app-extras`
+3. For the App source, enter:
+   ```
+   github:RobLoach/agent-canvas-app-extras
+   ```
 4. Click **Install**
 5. **Enable** the Extras app
 
