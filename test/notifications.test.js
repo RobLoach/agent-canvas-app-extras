@@ -130,3 +130,48 @@ test('does not chime while you are watching or when a run finishes', async (t) =
 
   assert.deepEqual(page.tones, []);
 });
+
+test('badges the app icon with the runs that need you until you open them', async (t) => {
+  const { page, host } = await watchRun(t, { appBadge: true });
+  assert.equal(page.badge, 0);
+
+  page.navigate(`/conversations/${B}`);
+  page.checkNow();
+  await settle();
+  await finish(page, host, A, 'waiting_for_confirmation');
+  assert.equal(page.badge, 1);
+
+  await finish(page, host, A, 'finished');
+  assert.equal(page.badge, 1);
+
+  page.navigate(`/conversations/${A}`);
+  page.checkNow();
+  await settle();
+  assert.equal(page.badge, 0);
+});
+
+test('badges a run that ends while you are away, and clears when you return', async (t) => {
+  const { page, host } = await watchRun(t, { appBadge: true });
+  await finish(page, host, A, 'waiting_for_confirmation');
+  assert.equal(page.badge, 0, 'not while you are watching it');
+
+  await finish(page, host, A, 'running');
+  page.hidden = true;
+  await finish(page, host, A, 'finished');
+  assert.equal(page.badge, 1);
+
+  page.returnToTab();
+  assert.equal(page.badge, 0);
+});
+
+test('clears the app icon badge when switched off', async (t) => {
+  const { page, host } = await watchRun(t, { appBadge: true });
+  page.hidden = true;
+  await finish(page, host);
+  assert.equal(page.badge, 1);
+
+  page.settings({});
+  page.checkNow();
+  await settle();
+  assert.equal(page.badge, 0);
+});

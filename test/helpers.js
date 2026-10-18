@@ -25,6 +25,7 @@ export function setupPage(
     notifications: [],
     fetched: [],
     tones: [],
+    badge: undefined,
   };
 
   Object.defineProperty(window.document, 'hidden', { get: () => page.hidden });
@@ -47,6 +48,13 @@ export function setupPage(
     close() {
       this.closed = true;
     }
+  };
+
+  window.navigator.setAppBadge = async (count) => {
+    page.badge = count;
+  };
+  window.navigator.clearAppBadge = async () => {
+    page.badge = 0;
   };
 
   // Records the tones the app plays; jsdom has no Web Audio.

@@ -5,6 +5,8 @@
 // - Desktop notifications: tells you when a run ends or needs you while
 //   you're away from it.
 // - Confirmation sound: chimes when a run needs you while you're away from it.
+// - App icon badge: counts the conversations waiting on you on the installed
+//   app's icon.
 
 const STORAGE_KEY = 'openhands-extras:settings';
 const STYLE_ID = 'openhands-extras-wide-canvas';
@@ -14,6 +16,7 @@ const DEFAULT_SETTINGS = {
   tabStatus: false,
   notifications: false,
   confirmationSound: false,
+  appBadge: false,
 };
 
 // The chat thread is the only max-w-200 element that is also h-full, so the
@@ -73,6 +76,14 @@ const SWITCHES = [
     description:
       'Play a chime when the agent needs your confirmation while this tab is in the background.',
     enable: unlockAudio,
+  },
+  {
+    key: 'appBadge',
+    label: 'App icon badge',
+    description:
+      "Show how many conversations need your input on the installed app's icon.",
+    enable: appBadgeProblem,
+    problem: appBadgeProblem,
   },
 ];
 
@@ -134,6 +145,12 @@ function notificationProblem() {
 async function requestNotificationPermission() {
   await window.Notification?.requestPermission();
   return notificationProblem();
+}
+
+function appBadgeProblem() {
+  return window.navigator.setAppBadge
+    ? null
+    : "Your browser doesn't support app icon badges.";
 }
 
 // Browsers only let audio start after a click on the page, so the context is
@@ -283,6 +300,7 @@ function watchAgentStatus(host) {
   const conversations = new Map();
   let openId = null;
   let appliedPrefix = '';
+  let appliedBadge = null;
   let lastCheck = 0;
   let trailing = 0;
   let poll = 0;
@@ -308,7 +326,10 @@ function watchAgentStatus(host) {
   // A browser window behind another app often still counts as visible.
   const away = () => document.hidden || !document.hasFocus();
   const watching = () =>
-    settings.tabStatus || settings.notifications || settings.confirmationSound;
+    settings.tabStatus ||
+    settings.notifications ||
+    settings.confirmationSound ||
+    settings.appBadge;
 
   function badge() {
     const open = settings.tabStatus && conversations.get(openId);
@@ -377,9 +398,26 @@ function watchAgentStatus(host) {
     applyIcon();
   }
 
+  // One badge for the whole installed app, which only shows outside a
+  // browser tab; it counts the runs that ended or need you while you were
+  // away, until you look at them.
+  function renderBadge() {
+    const count = settings.appBadge
+      ? [...conversations.values()].filter((entry) => entry.needsYou).length
+      : 0;
+    if (count === appliedBadge) return;
+    appliedBadge = count;
+    const { navigator } = window;
+    const call = count
+      ? navigator.setAppBadge?.(count)
+      : navigator.clearAppBadge?.();
+    call?.catch(() => {});
+  }
+
   function render() {
     renderTitle();
     renderIcon();
+    renderBadge();
   }
 
   async function notify(id, title, next) {
@@ -413,12 +451,14 @@ function watchAgentStatus(host) {
     entry.status = next;
     entry.title = info.title || entry.title;
     if (ACTIVE_STATUSES.has(next)) entry.sawActive = true;
+    if (next === 'running') entry.needsYou = false;
     const changedWhileAway =
       previous &&
       previous !== next &&
       entry.sawActive &&
       (id !== openId || away());
     if (!changedWhileAway) return;
+    if (NOTIFY_STATUSES.has(next)) entry.needsYou = true;
     if (settings.notifications && NOTIFY_STATUSES.has(next)) {
       notify(id, entry.title, next);
     }
@@ -439,12 +479,22 @@ function watchAgentStatus(host) {
     if (nextOpenId !== openId) {
       openId = nextOpenId;
       if (openId && !conversations.has(openId)) {
-        conversations.set(openId, { status: null, title: '', sawActive: false });
+        conversations.set(openId, {
+          status: null,
+          title: '',
+          sawActive: false,
+          needsYou: false,
+        });
       }
+      const open = conversations.get(openId);
+      if (open && !away()) open.needsYou = false;
       render();
     }
     for (const [id, entry] of conversations) {
-      const followRun = watching() && ACTIVE_STATUSES.has(entry.status);
+      const followRun =
+        watching() &&
+        (ACTIVE_STATUSES.has(entry.status) ||
+          (settings.appBadge && entry.needsYou));
       if (id !== openId && !followRun) conversations.delete(id);
     }
     const ids = [...conversations.keys()];
@@ -502,6 +552,7 @@ function watchAgentStatus(host) {
     if (away() || !watching()) return;
     const open = conversations.get(openId);
     if (open && !ACTIVE_STATUSES.has(open.status)) open.sawActive = false;
+    if (open) open.needsYou = false;
     render();
     requestCheck();
   }
