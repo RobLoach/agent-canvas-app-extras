@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "name": "agent-canvas-app-extras",
+  "display_name": "Extras",
+  "version": "0.1.0",
+  "description": "Extra Agent Canvas tweaks, starting with a Wide Canvas chat layout.",
+  "entrypoint": "extension.js"
+}
