@@ -6,26 +6,21 @@ An [OpenHands](https://www.openhands.dev/) Agent Canvas app which adds a few ext
 
 ## Features
 
-- **Wide Canvas**
+| Name | Description |
+| :-- | :-- |
+| **Wide Canvas** | Removes the maximum width cap from the chat window so the conversation fills the full canvas width. |
 
 ## Install
 
-1. Visit **Customize > Apps**
-2. Click on **Add app**
+1. Visit **Customize > Apps** (`/apps`)
+2. Click on **Add app** at the top right
 3. For the App source, enter:
    ```
    github:RobLoach/agent-canvas-app-extras
    ```
 4. Click **Install**
 5. **Enable** the Extras app
-
-## Configuration
-
-The settings for the app appear directly in the Extras card in **Customize > Apps** (`/apps`)
-
-| Name | Description |
-| :-- | :-- |
-| **Wide Canvas** | Removes the maximum width cap from the chat window so the conversation fills the full canvas width. |
+6. Configuration appears directly in the Extras card
 
 ## Development
 
