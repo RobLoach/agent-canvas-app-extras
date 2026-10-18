@@ -96,6 +96,21 @@ test('leaves a title that already starts with a badge emoji alone', async (t) =>
   assert.equal(page.document.title, '⏳ ✅ Release checklist');
 });
 
+test('does not repeat a badge emoji the title already starts with', async (t) => {
+  const page = openConversation(t);
+  page.document.querySelector('title').firstChild.nodeValue = '✅🔧 Miscellaneous Request';
+  const host = fakeHost({ statuses: { [ID]: 'running' } });
+  await activateExtension(page, host);
+  await settle();
+  assert.equal(page.document.title, '⏳ ✅🔧 Miscellaneous Request');
+
+  host.statuses[ID] = 'finished';
+  page.checkNow();
+  await settle();
+  assert.equal(page.document.title, '✅🔧 Miscellaneous Request');
+  assert.equal(iconColor(page), '#22c55e');
+});
+
 test('re-badges the icon when React resets its href', async (t) => {
   const page = openConversation(t);
   await activateExtension(page, fakeHost({ statuses: { [ID]: 'running' } }));

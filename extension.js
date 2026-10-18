@@ -263,7 +263,8 @@ function watchAgentStatus(host) {
   }
 
   // Only strip the prefix we added, so a title of Canvas's own that starts
-  // with one of the badge emoji stays intact.
+  // with one of the badge emoji stays intact. Skip the prefix when the title
+  // already starts with the same emoji.
   function renderTitle() {
     const current = document.title;
     const base =
@@ -271,7 +272,7 @@ function watchAgentStatus(host) {
         ? current.slice(appliedPrefix.length)
         : current;
     const emoji = badge()?.emoji;
-    appliedPrefix = emoji ? `${emoji} ` : '';
+    appliedPrefix = emoji && !base.startsWith(emoji) ? `${emoji} ` : '';
     if (current !== appliedPrefix + base) setTitle(appliedPrefix + base);
   }
 
