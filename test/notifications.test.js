@@ -95,3 +95,38 @@ test('does not navigate when the notification is for the open conversation', asy
   page.notifications[0].onclick();
   assert.deepEqual(host.navigations, []);
 });
+
+test('strips Markdown from the final reply and cuts it on a word', async (t) => {
+  const { page, host } = await watchRun(t);
+  page.hidden = true;
+  const words = Array(60).fill('word').join(' ');
+  host.agentServer.request = async ({ path }) =>
+    path.endsWith('/agent_final_response')
+      ? { response: `## Done\n\n- Fixed **the** \`bug\` in [extension.js](https://x.test)\n\n\`\`\`js\ncode();\n\`\`\`\n${words}` }
+      : [{ execution_status: 'finished', title: 'Release' }];
+  page.checkNow();
+  await settle();
+
+  const body = page.notifications[0].options.body;
+  assert.ok(body.startsWith('Done Fixed the bug in extension.js word word'), body);
+  assert.ok(body.endsWith('word…'), body);
+  assert.ok(Array.from(body).length <= 201, body);
+});
+
+test('chimes when a run needs confirmation while you are away', async (t) => {
+  const { page, host } = await watchRun(t, { confirmationSound: true });
+  page.hidden = true;
+  await finish(page, host, A, 'waiting_for_confirmation');
+
+  assert.deepEqual(page.tones, [880, 660]);
+  assert.equal(page.notifications.length, 0);
+});
+
+test('does not chime while you are watching or when a run finishes', async (t) => {
+  const { page, host } = await watchRun(t, { confirmationSound: true });
+  await finish(page, host, A, 'waiting_for_confirmation');
+  page.hidden = true;
+  await finish(page, host, A, 'finished');
+
+  assert.deepEqual(page.tones, []);
+});

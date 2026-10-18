@@ -148,3 +148,26 @@ test('does not check outside conversation pages', async (t) => {
 
   assert.deepEqual(host.requests, []);
 });
+
+test('counts runs still going in conversations you navigated away from', async (t) => {
+  const OTHER = 'fedcba9876543210fedcba9876543210';
+  const page = openConversation(t);
+  const host = fakeHost({ statuses: { [ID]: 'running', [OTHER]: 'running' } });
+  await activateExtension(page, host);
+  await settle();
+
+  page.navigate(`/conversations/${OTHER}`);
+  page.checkNow();
+  await settle();
+  assert.equal(page.document.title, '⏳2 My chat');
+
+  host.statuses[OTHER] = 'finished';
+  page.checkNow();
+  await settle();
+  assert.equal(page.document.title, '✅ ⏳1 My chat');
+
+  host.statuses[ID] = 'finished';
+  page.checkNow();
+  await settle();
+  assert.equal(page.document.title, '✅ My chat');
+});

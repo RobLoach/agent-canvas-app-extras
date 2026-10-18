@@ -30,7 +30,7 @@ test('adds the settings above its own card footer on Customize > Apps', async (t
       .children.length,
     2,
   );
-  for (const key of ['wideCanvas', 'tabStatus', 'notifications']) {
+  for (const key of ['wideCanvas', 'tabStatus', 'notifications', 'confirmationSound']) {
     assert.equal(switchFor(page, key).checked, false, key);
     assert.ok(hintFor(page, key), `${key} has a description`);
   }

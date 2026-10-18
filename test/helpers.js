@@ -24,6 +24,7 @@ export function setupPage(
     permissionAnswer: 'granted',
     notifications: [],
     fetched: [],
+    tones: [],
   };
 
   Object.defineProperty(window.document, 'hidden', { get: () => page.hidden });
@@ -45,6 +46,26 @@ export function setupPage(
     }
     close() {
       this.closed = true;
+    }
+  };
+
+  // Records the tones the app plays; jsdom has no Web Audio.
+  window.AudioContext = class {
+    currentTime = 0;
+    destination = {};
+    resume() {}
+    createGain() {
+      const ramp = () => {};
+      return { gain: { setValueAtTime: ramp, exponentialRampToValueAtTime: ramp }, connect: (node) => node };
+    }
+    createOscillator() {
+      const oscillator = {
+        frequency: {},
+        connect: (node) => node,
+        start: () => page.tones.push(oscillator.frequency.value),
+        stop() {},
+      };
+      return oscillator;
     }
   };
 

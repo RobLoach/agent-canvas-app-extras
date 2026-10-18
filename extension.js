@@ -4,6 +4,7 @@
 // - Tab status: badges the tab's title and icon with the agent's status.
 // - Desktop notifications: tells you when a run ends or needs you while
 //   you're away from it.
+// - Confirmation sound: chimes when a run needs you while you're away from it.
 
 const STORAGE_KEY = 'openhands-extras:settings';
 const STYLE_ID = 'openhands-extras-wide-canvas';
@@ -12,6 +13,7 @@ const DEFAULT_SETTINGS = {
   wideCanvas: false,
   tabStatus: false,
   notifications: false,
+  confirmationSound: false,
 };
 
 // The chat thread is the only max-w-200 element that is also h-full, so the
@@ -31,7 +33,7 @@ const STATUS_BADGES = {
     color: '#f59e0b',
     label: 'Needs your confirmation',
   },
-  paused: { emoji: '⏸', color: '#9ca3af', label: 'Paused' },
+  paused: { emoji: '⏸️', color: '#9ca3af', label: 'Paused' },
   finished: { emoji: '✅', color: '#22c55e', label: 'Finished' },
   error: { emoji: '❌', color: '#ef4444', label: 'Stopped with an error' },
   stuck: { emoji: '❌', color: '#ef4444', label: 'Got stuck' },
@@ -64,6 +66,13 @@ const SWITCHES = [
       'Notify you when the agent finishes or needs you while this tab is in the background.',
     enable: requestNotificationPermission,
     problem: notificationProblem,
+  },
+  {
+    key: 'confirmationSound',
+    label: 'Confirmation sound',
+    description:
+      'Play a chime when the agent needs your confirmation while this tab is in the background.',
+    enable: unlockAudio,
   },
 ];
 
@@ -125,6 +134,52 @@ function notificationProblem() {
 async function requestNotificationPermission() {
   await window.Notification?.requestPermission();
   return notificationProblem();
+}
+
+// Browsers only let audio start after a click on the page, so the context is
+// created when the switch is turned on; any later click unlocks it too.
+let audio = null;
+function unlockAudio() {
+  const Context = window.AudioContext ?? window.webkitAudioContext;
+  if (!Context) return 'Your browser does not support playing sounds.';
+  audio ??= new Context();
+  audio.resume?.();
+  return null;
+}
+
+// Two short falling tones, made on the fly so the app needs no sound file.
+function playChime() {
+  if (unlockAudio()) return;
+  const start = audio.currentTime;
+  [880, 660].forEach((frequency, index) => {
+    const at = start + index * 0.18;
+    const oscillator = audio.createOscillator();
+    const gain = audio.createGain();
+    oscillator.frequency.value = frequency;
+    gain.gain.setValueAtTime(0.15, at);
+    gain.gain.exponentialRampToValueAtTime(0.001, at + 0.16);
+    oscillator.connect(gain).connect(audio.destination);
+    oscillator.start(at);
+    oscillator.stop(at + 0.16);
+  });
+}
+
+// Final responses are Markdown, which notifications show as raw text. Strip
+// the syntax and cut on a word boundary without splitting an emoji.
+function plainText(markdown, max = 200) {
+  const text = markdown
+    .replace(/```[\s\S]*?(?:```|$)/g, ' ')
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/^\s*([-*_])(?:\s*\1){2,}\s*$/gm, ' ')
+    .replace(/^\s{0,3}(?:#{1,6}|>|[-*+]|\d+[.)])\s+/gm, '')
+    .replace(/\*+|~~|`+/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const chars = Array.from(text);
+  if (chars.length <= max) return text;
+  const cut = chars.slice(0, max).join('');
+  const space = cut.lastIndexOf(' ');
+  return `${(space > cut.length / 2 ? cut.slice(0, space) : cut).trimEnd()}…`;
 }
 
 function buildSwitch(item, onChange) {
@@ -252,7 +307,8 @@ function watchAgentStatus(host) {
 
   // A browser window behind another app often still counts as visible.
   const away = () => document.hidden || !document.hasFocus();
-  const watching = () => settings.tabStatus || settings.notifications;
+  const watching = () =>
+    settings.tabStatus || settings.notifications || settings.confirmationSound;
 
   function badge() {
     const open = settings.tabStatus && conversations.get(openId);
@@ -262,17 +318,31 @@ function watchAgentStatus(host) {
       : null;
   }
 
+  // The open conversation's badge, plus how many runs you opened in this tab
+  // are still going elsewhere: "⏳3" when the open one is running too, or
+  // "✅ ⏳2" when it isn't. A lone badge is skipped when the title already
+  // starts with the same emoji.
+  function titlePrefix(base) {
+    const emoji = badge()?.emoji;
+    const others = settings.tabStatus
+      ? [...conversations].filter(
+          ([id, entry]) => id !== openId && ACTIVE_STATUSES.has(entry.status),
+        ).length
+      : 0;
+    if (!others) return emoji && !base.startsWith(emoji) ? `${emoji} ` : '';
+    if (emoji === STATUS_BADGES.running.emoji) return `${emoji}${others + 1} `;
+    return `${emoji ? `${emoji} ` : ''}${STATUS_BADGES.running.emoji}${others} `;
+  }
+
   // Only strip the prefix we added, so a title of Canvas's own that starts
-  // with one of the badge emoji stays intact. Skip the prefix when the title
-  // already starts with the same emoji.
+  // with one of the badge emoji stays intact.
   function renderTitle() {
     const current = document.title;
     const base =
       appliedPrefix && current.startsWith(appliedPrefix)
         ? current.slice(appliedPrefix.length)
         : current;
-    const emoji = badge()?.emoji;
-    appliedPrefix = emoji && !base.startsWith(emoji) ? `${emoji} ` : '';
+    appliedPrefix = titlePrefix(base);
     if (current !== appliedPrefix + base) setTitle(appliedPrefix + base);
   }
 
@@ -319,7 +389,7 @@ function watchAgentStatus(host) {
       const result = await host.agentServer
         .request({ path: `/api/conversations/${id}/agent_final_response` })
         .catch(() => null);
-      if (result?.response) body = result.response.slice(0, 200);
+      if (result?.response) body = plainText(result.response) || body;
     }
     if (disposed) return;
     const notification = new Notification(title || 'OpenHands', {
@@ -343,15 +413,17 @@ function watchAgentStatus(host) {
     entry.status = next;
     entry.title = info.title || entry.title;
     if (ACTIVE_STATUSES.has(next)) entry.sawActive = true;
-    if (
+    const changedWhileAway =
       previous &&
       previous !== next &&
       entry.sawActive &&
-      NOTIFY_STATUSES.has(next) &&
-      settings.notifications &&
-      (id !== openId || away())
-    ) {
+      (id !== openId || away());
+    if (!changedWhileAway) return;
+    if (settings.notifications && NOTIFY_STATUSES.has(next)) {
       notify(id, entry.title, next);
+    }
+    if (settings.confirmationSound && next === 'waiting_for_confirmation') {
+      playChime();
     }
   }
 
@@ -372,8 +444,7 @@ function watchAgentStatus(host) {
       render();
     }
     for (const [id, entry] of conversations) {
-      const followRun =
-        settings.notifications && ACTIVE_STATUSES.has(entry.status);
+      const followRun = watching() && ACTIVE_STATUSES.has(entry.status);
       if (id !== openId && !followRun) conversations.delete(id);
     }
     const ids = [...conversations.keys()];
