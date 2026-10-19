@@ -10,11 +10,16 @@
 // - Title bar colour: matches the installed app's title bar to Canvas's theme.
 // - Hide "Running" and "Reading": folds those chat entries into "Thinking"
 //   rows that expand to show them.
+//
+// Each feature is an object with any of refresh() (settings changed),
+// onDomChange(), onStorage(key) and dispose(), which activate() calls.
 
 const STORAGE_KEY = 'openhands-extras:settings';
 // Runs that ended while you were away, shared by every Canvas window and kept
 // across reloads until you open them.
 const UNSEEN_KEY = 'openhands-extras:unseen';
+const SECTION_ID = 'openhands-extras-settings';
+const WIDE_STYLE_ID = 'openhands-extras-wide-canvas';
 const THEME_META_ID = 'openhands-extras-theme-color';
 const QUIET_STYLE_ID = 'openhands-extras-quiet-activity';
 const QUIET_ATTR = 'data-extras-quiet';
@@ -34,17 +39,6 @@ const QUIET_LABELS = {
   OBSERVATION_MESSAGE$READ: 'Read <path>{{path}}</path>',
 };
 const THINKING_KEY = 'THINKING$TITLE';
-const STYLE_ID = 'openhands-extras-wide-canvas';
-const SECTION_ID = 'openhands-extras-settings';
-const DEFAULT_SETTINGS = {
-  wideCanvas: false,
-  tabStatus: false,
-  notifications: false,
-  confirmationSound: false,
-  appBadge: false,
-  themeColor: false,
-  quietActivity: false,
-};
 
 // The chat thread is the only max-w-200 element that is also h-full, so the
 // Customize, Settings and home launcher columns keep their width. Unlayered
@@ -77,13 +71,10 @@ const STATUS_BADGES = {
 // saw the run, until you come back to the tab.
 const ACTIVE_STATUSES = new Set(['running', 'waiting_for_confirmation']);
 const ENDED_STATUSES = new Set(['finished', 'error', 'stuck']);
-const NOTIFY_STATUSES = new Set([
-  'waiting_for_confirmation',
-  'finished',
-  'error',
-  'stuck',
-]);
+const NOTIFY_STATUSES = new Set(['waiting_for_confirmation', ...ENDED_STATUSES]);
 
+// check() says why a switch can't work, e.g. after a permission was revoked;
+// enable(), which defaults to it, may also ask the browser for what it needs.
 const SWITCHES = [
   {
     key: 'wideCanvas',
@@ -100,8 +91,8 @@ const SWITCHES = [
     label: 'Desktop notifications',
     description:
       'Notify you when the agent finishes or needs you while this tab is in the background.',
+    check: notificationProblem,
     enable: requestNotificationPermission,
-    problem: notificationProblem,
   },
   {
     key: 'confirmationSound',
@@ -115,8 +106,7 @@ const SWITCHES = [
     label: 'App icon badge',
     description:
       "Show how many conversations need your input on the installed app's icon.",
-    enable: appBadgeProblem,
-    problem: appBadgeProblem,
+    check: appBadgeProblem,
   },
   {
     key: 'themeColor',
@@ -131,6 +121,9 @@ const SWITCHES = [
       'Fold the agent\'s "Running" and "Reading" entries in the chat into "Thinking", which expands to show them.',
   },
 ];
+const DEFAULT_SETTINGS = Object.fromEntries(
+  SWITCHES.map(({ key }) => [key, false]),
+);
 
 // Class strings mirror Canvas's ToggleSwitchVisual (src/ui/toggle-switch.tsx)
 // so the switch picks up the same compiled Tailwind styles.
@@ -145,15 +138,16 @@ const THUMB_OFF_CLASS = 'translate-x-0.5 rtl:-translate-x-0.5 bg-muted';
 
 let settings = DEFAULT_SETTINGS;
 
-function loadSettings() {
+function readJson(key, fallback) {
   try {
-    settings = {
-      ...DEFAULT_SETTINGS,
-      ...JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}'),
-    };
+    return JSON.parse(localStorage.getItem(key)) ?? fallback;
   } catch {
-    settings = DEFAULT_SETTINGS;
+    return fallback;
   }
+}
+
+function loadSettings() {
+  settings = { ...DEFAULT_SETTINGS, ...readJson(STORAGE_KEY, {}) };
 }
 
 function saveSettings(next) {
@@ -161,25 +155,37 @@ function saveSettings(next) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
 }
 
-function applyWideCanvas(enabled) {
-  let style = document.getElementById(STYLE_ID);
-  if (enabled && !style) {
-    style = document.createElement('style');
-    style.id = STYLE_ID;
-    style.textContent = WIDE_CANVAS_CSS;
-    document.head.append(style);
-  } else if (!enabled && style) {
-    style.remove();
+// One of our own elements in <head>, by id, created on first use.
+function headElement(id, tag, { first = false } = {}) {
+  let element = document.getElementById(id);
+  if (!element) {
+    element = document.createElement(tag);
+    element.id = id;
+    document.head[first ? 'prepend' : 'append'](element);
   }
+  return element;
 }
+
+const removeElement = (id) => document.getElementById(id)?.remove();
+
+function toggleStyle(id, css, on) {
+  if (!on) {
+    removeElement(id);
+    return;
+  }
+  const style = headElement(id, 'style');
+  if (style.textContent !== css) style.textContent = css;
+}
+
+const setAttr = (element, name, on) => {
+  if (element.hasAttribute(name) !== on) element.toggleAttribute(name, on);
+};
 
 const PERMISSION_PROBLEMS = {
   denied: 'Notifications are blocked for this site in your browser settings.',
   default: "Your browser hasn't allowed notifications yet.",
 };
 
-// Why notifications can't show even though the switch is on, e.g. after the
-// permission was revoked in the browser's site settings.
 function notificationProblem() {
   if (!window.Notification || !window.isSecureContext) {
     return 'Your browser only allows notifications over HTTPS or on localhost.';
@@ -190,24 +196,6 @@ function notificationProblem() {
 async function requestNotificationPermission() {
   await window.Notification?.requestPermission();
   return notificationProblem();
-}
-
-function loadUnseen() {
-  try {
-    const ids = JSON.parse(localStorage.getItem(UNSEEN_KEY) ?? '[]');
-    return new Set(Array.isArray(ids) ? ids : []);
-  } catch {
-    return new Set();
-  }
-}
-
-function markUnseen(id, unseen) {
-  const ids = loadUnseen();
-  if (ids.has(id) === unseen) return;
-  if (unseen) ids.add(id);
-  else ids.delete(id);
-  if (ids.size) localStorage.setItem(UNSEEN_KEY, JSON.stringify([...ids]));
-  else localStorage.removeItem(UNSEEN_KEY);
 }
 
 // Canvas marks <body> as well as its themed root, which carries the theme.
@@ -240,18 +228,13 @@ function watchThemeColor() {
   let root = null;
   const scheme = window.matchMedia?.('(prefers-color-scheme: dark)');
   const apply = () => {
-    let meta = document.getElementById(THEME_META_ID);
     const color = settings.themeColor && canvasBackground();
     if (!color) {
-      meta?.remove();
+      removeElement(THEME_META_ID);
       return;
     }
-    if (!meta) {
-      meta = document.createElement('meta');
-      meta.id = THEME_META_ID;
-      meta.name = 'theme-color';
-      document.head.prepend(meta);
-    }
+    const meta = headElement(THEME_META_ID, 'meta', { first: true });
+    meta.name = 'theme-color';
     if (meta.content !== color) meta.content = color;
   };
   const observer = new MutationObserver(apply);
@@ -273,7 +256,7 @@ function watchThemeColor() {
     dispose() {
       observer.disconnect();
       scheme?.removeEventListener?.('change', apply);
-      document.getElementById(THEME_META_ID)?.remove();
+      removeElement(THEME_META_ID);
     },
   };
 }
@@ -321,10 +304,6 @@ function buildThinking(onToggle) {
 
 const expanded = (thinking) =>
   thinking.firstElementChild.getAttribute('aria-expanded') === 'true';
-
-const setAttr = (element, name, on) => {
-  if (element.hasAttribute(name) !== on) element.toggleAttribute(name, on);
-};
 
 // Mark the "Running" and "Reading" entries, which a style hides, rather than
 // removing nodes React owns, and fold each stretch of them into a "Thinking"
@@ -379,7 +358,7 @@ function watchQuietActivity(statusOf) {
     for (const thinking of document.querySelectorAll(`[${THINKING_ATTR}]`)) {
       thinking.remove();
     }
-    document.getElementById(QUIET_STYLE_ID)?.remove();
+    toggleStyle(QUIET_STYLE_ID, '', false);
     toggles = new WeakMap();
   }
 
@@ -429,12 +408,11 @@ function watchQuietActivity(statusOf) {
     }
     active = true;
     loadLabels();
-    if (!document.getElementById(QUIET_STYLE_ID)) {
-      const style = document.createElement('style');
-      style.id = QUIET_STYLE_ID;
-      style.textContent = `[${QUIET_ATTR}]:not([${SHOWN_ATTR}]) { display: none !important; }`;
-      document.head.append(style);
-    }
+    toggleStyle(
+      QUIET_STYLE_ID,
+      `[${QUIET_ATTR}]:not([${SHOWN_ATTR}]) { display: none !important; }`,
+      true,
+    );
     const chat = document.querySelector('[data-testid="chat-scroll-container"]');
     if (!chat) return;
     const items = [...chat.children].map(readItem);
@@ -541,6 +519,30 @@ function plainText(markdown, max = 200) {
   return `${(space > cut.length / 2 ? cut.slice(0, space) : cut).trimEnd()}…`;
 }
 
+// Notify about a run's new status, with the agent's final reply when it
+// finished. Clicking opens the run, which may not be the one on screen.
+async function notify(host, { id, title, status, icon, isOpen, isDisposed }) {
+  if (window.Notification?.permission !== 'granted') return;
+  let body = STATUS_BADGES[status].label;
+  if (status === 'finished') {
+    const result = await host.agentServer
+      .request({ path: `/api/conversations/${id}/agent_final_response` })
+      .catch(() => null);
+    if (result?.response) body = plainText(result.response) || body;
+  }
+  if (isDisposed()) return;
+  const notification = new Notification(title || 'OpenHands', {
+    body,
+    tag: `openhands-extras-${id}`,
+    icon,
+  });
+  notification.onclick = () => {
+    window.focus();
+    if (!isOpen()) host.navigate(`/conversations/${id}`);
+    notification.close();
+  };
+}
+
 function buildSwitch(item, onChange) {
   const block = document.createElement('div');
   block.className = 'flex min-w-0 flex-col gap-1';
@@ -557,16 +559,17 @@ function buildSwitch(item, onChange) {
   const input = block.querySelector('input');
   const track = input.nextElementSibling;
   const hint = block.querySelector('p');
+  const enable = item.enable ?? item.check;
   block.querySelector('.text-sm').textContent = item.label;
   const render = () => {
     track.className = `${TRACK_CLASS} ${input.checked ? TRACK_ON_CLASS : TRACK_OFF_CLASS}`;
     track.firstElementChild.className = `${THUMB_CLASS} ${input.checked ? THUMB_ON_CLASS : THUMB_OFF_CLASS}`;
   };
   input.checked = settings[item.key];
-  hint.textContent = (input.checked && item.problem?.()) || item.description;
+  hint.textContent = (input.checked && item.check?.()) || item.description;
   render();
   input.addEventListener('change', async () => {
-    const problem = input.checked && item.enable ? await item.enable() : null;
+    const problem = input.checked && enable ? await enable() : null;
     if (problem) input.checked = false;
     hint.textContent = problem ?? item.description;
     render();
@@ -575,35 +578,40 @@ function buildSwitch(item, onChange) {
   return block;
 }
 
-function buildSection(onChange) {
-  const section = document.createElement('section');
-  section.id = SECTION_ID;
-  section.className = 'flex min-w-0 flex-col gap-4 border-t border-border pt-3';
-  section.append(...SWITCHES.map((item) => buildSwitch(item, onChange)));
-  return section;
-}
-
 // App cards on Customize > Apps have no host API for settings, so add a
 // section above this app's card footer. React may insert its own nodes
-// before the footer later, so re-place the section whenever it's displaced.
-function placeSection(cardSelector, onChange) {
-  // Skip the DOM search everywhere but Customize > Apps (e.g. while chatting).
-  if (!/\/apps\/?$/.test(location.pathname)) return;
-  const footer = document.querySelector(`${cardSelector} > footer`);
-  if (!footer || footer.previousElementSibling?.id === SECTION_ID) return;
-  document.getElementById(SECTION_ID)?.remove();
-  footer.before(buildSection(onChange));
-}
-
+// before the footer later, so re-place the section whenever it's displaced,
+// and rebuild it when another tab changes the settings.
 function watchAppCard(name, onChange) {
   const cardSelector = `article[data-testid="canvas-extension-card-${name}"]`;
-  const place = () => placeSection(cardSelector, onChange);
+  function place() {
+    // Skip the DOM search everywhere but Customize > Apps (e.g. while chatting).
+    if (!/\/apps\/?$/.test(location.pathname)) return;
+    const footer = document.querySelector(`${cardSelector} > footer`);
+    if (!footer || footer.previousElementSibling?.id === SECTION_ID) return;
+    removeElement(SECTION_ID);
+    const section = document.createElement('section');
+    section.id = SECTION_ID;
+    section.className = 'flex min-w-0 flex-col gap-4 border-t border-border pt-3';
+    section.append(...SWITCHES.map((item) => buildSwitch(item, onChange)));
+    footer.before(section);
+  }
   place();
   return {
     onDomChange: place,
-    dispose: () => document.getElementById(SECTION_ID)?.remove(),
+    onStorage(key) {
+      if (key !== STORAGE_KEY) return;
+      removeElement(SECTION_ID);
+      place();
+    },
+    dispose: () => removeElement(SECTION_ID),
   };
 }
+
+const wideCanvas = () => ({
+  refresh: () => toggleStyle(WIDE_STYLE_ID, WIDE_CANVAS_CSS, settings.wideCanvas),
+  dispose: () => toggleStyle(WIDE_STYLE_ID, '', false),
+});
 
 // Edit the <title>'s text node in place: replacing it (document.title = …)
 // would detach the node React updates and freeze Canvas's own titles.
@@ -632,14 +640,69 @@ async function loadDataUrl(url) {
   }
 }
 
-// Badge the tab's title and favicon with the open conversation's status, and
-// notify when a run ends while you're away from it. Canvas re-renders the
+// A coloured dot on the tab icon, holding a count when there is one. It swaps
+// the href of Canvas's own icon links: browsers don't reliably switch to an
+// extra icon link, and React owns these elements, so they must not be
+// removed. Their original hrefs come back when it clears.
+function faviconBadge() {
+  const originalHrefs = new WeakMap();
+  const badgedHrefs = new Set();
+  let href = null;
+  let shown = null;
+  let source;
+  const links = () => document.head.querySelectorAll('link[rel~="icon"]');
+
+  function originalUrl() {
+    const link = links()[0];
+    const original = link && (originalHrefs.get(link) ?? link.getAttribute('href'));
+    return original ? new URL(original, document.baseURI).href : undefined;
+  }
+
+  // Also re-run when Canvas adds an icon link or React rewrites its href.
+  function apply() {
+    for (const link of links()) {
+      const current = link.getAttribute('href');
+      if (!badgedHrefs.has(current)) originalHrefs.set(link, current);
+      const next = href ?? originalHrefs.get(link);
+      if (next && current !== next) link.setAttribute('href', next);
+    }
+  }
+
+  async function show(color, count) {
+    const key = color && `${color}|${count}`;
+    if (key === shown) return;
+    shown = key;
+    if (!key) {
+      href = null;
+      apply();
+      return;
+    }
+    source ??= loadDataUrl(originalUrl());
+    const image = await source;
+    if (shown !== key) return;
+    const background = image
+      ? `<image href="${image}" width="32" height="32"/>`
+      : '';
+    const dot = count
+      ? `<circle cx="22" cy="22" r="10" fill="${color}" stroke="#fff" stroke-width="2"/><text x="22" y="22" fill="#fff" font-family="sans-serif" font-size="${count > 9 ? 11 : 14}" font-weight="700" text-anchor="middle" dominant-baseline="central">${count > 9 ? '9+' : count}</text>`
+      : `<circle cx="24" cy="24" r="7" fill="${color}" stroke="#fff" stroke-width="2"/>`;
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">${background}${dot}</svg>`;
+    href = `data:image/svg+xml,${encodeURIComponent(svg)}`;
+    badgedHrefs.add(href);
+    apply();
+  }
+
+  return { show, apply, originalUrl };
+}
+
+// Follow the open conversation's status, and runs this tab saw that you've
+// since navigated away from, to badge the tab and app icon and to notify when
+// a run ends or needs you while you're away from it. Canvas re-renders the
 // chat as events stream in, background tabs included, so DOM changes trigger
-// checks.
+// checks; onRender runs after every change in what's known.
 function watchAgentStatus(host, onRender) {
-  // The open conversation, plus runs this tab saw that you've since navigated
-  // away from, which are followed until they end so they can still notify.
   const conversations = new Map();
+  const favicon = faviconBadge();
   let openId = null;
   let appliedPrefix = '';
   let appliedBadge = null;
@@ -652,21 +715,6 @@ function watchAgentStatus(host, onRender) {
   let again = false;
   let disposed = false;
 
-  // The badge swaps the href of Canvas's own icon links: browsers don't
-  // reliably switch to an extra icon link, and React owns these elements, so
-  // they must not be removed. Their original hrefs come back when it clears.
-  const originalHrefs = new WeakMap();
-  const badgedHrefs = new Set();
-  let iconHref = null;
-  let iconKey = null;
-  let iconSource;
-  const iconLinks = () => document.head.querySelectorAll('link[rel~="icon"]');
-  const originalIconUrl = () => {
-    const link = iconLinks()[0];
-    const href = link && (originalHrefs.get(link) ?? link.getAttribute('href'));
-    return href ? new URL(href, document.baseURI).href : undefined;
-  };
-
   // A browser window behind another app often still counts as visible.
   const away = () => document.hidden || !document.hasFocus();
   const watching = () =>
@@ -678,7 +726,20 @@ function watchAgentStatus(host, onRender) {
   // The count of conversations that need your input feeds the app icon badge
   // and the tab icon.
   const counting = () => settings.tabStatus || settings.appBadge;
+  const loadUnseen = () => {
+    const ids = readJson(UNSEEN_KEY, []);
+    return new Set(Array.isArray(ids) ? ids : []);
+  };
   const needsYou = () => (counting() ? waiting + loadUnseen().size : 0);
+
+  function markUnseen(id, unseen) {
+    const ids = loadUnseen();
+    if (ids.has(id) === unseen) return;
+    if (unseen) ids.add(id);
+    else ids.delete(id);
+    if (ids.size) localStorage.setItem(UNSEEN_KEY, JSON.stringify([...ids]));
+    else localStorage.removeItem(UNSEEN_KEY);
+  }
 
   function badge() {
     const open = settings.tabStatus && conversations.get(openId);
@@ -716,46 +777,6 @@ function watchAgentStatus(host, onRender) {
     if (current !== appliedPrefix + base) setTitle(appliedPrefix + base);
   }
 
-  // Also re-run when Canvas adds an icon link or React rewrites its href.
-  function applyIcon() {
-    for (const link of iconLinks()) {
-      const current = link.getAttribute('href');
-      if (!badgedHrefs.has(current)) originalHrefs.set(link, current);
-      const next = iconHref ?? originalHrefs.get(link);
-      if (next && current !== next) link.setAttribute('href', next);
-    }
-  }
-
-  // The dot takes the open conversation's colour, and holds the number of
-  // conversations that need your input when there are any.
-  async function renderIcon() {
-    const count = settings.tabStatus ? needsYou() : 0;
-    const color =
-      badge()?.color ??
-      (count ? STATUS_BADGES.waiting_for_confirmation.color : null);
-    const key = color && `${color}|${count}`;
-    if (key === iconKey) return;
-    iconKey = key;
-    if (!key) {
-      iconHref = null;
-      applyIcon();
-      return;
-    }
-    iconSource ??= loadDataUrl(originalIconUrl());
-    const source = await iconSource;
-    if (iconKey !== key) return;
-    const image = source
-      ? `<image href="${source}" width="32" height="32"/>`
-      : '';
-    const dot = count
-      ? `<circle cx="22" cy="22" r="10" fill="${color}" stroke="#fff" stroke-width="2"/><text x="22" y="22" fill="#fff" font-family="sans-serif" font-size="${count > 9 ? 11 : 14}" font-weight="700" text-anchor="middle" dominant-baseline="central">${count > 9 ? '9+' : count}</text>`
-      : `<circle cx="24" cy="24" r="7" fill="${color}" stroke="#fff" stroke-width="2"/>`;
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">${image}${dot}</svg>`;
-    iconHref = `data:image/svg+xml,${encodeURIComponent(svg)}`;
-    badgedHrefs.add(iconHref);
-    applyIcon();
-  }
-
   // One badge for the whole installed app, which only shows outside a
   // browser tab: the conversations waiting for confirmation, plus the runs
   // that ended while you were away until you open them.
@@ -772,32 +793,16 @@ function watchAgentStatus(host, onRender) {
 
   function render() {
     renderTitle();
-    renderIcon();
+    // The tab icon's dot takes the open conversation's colour, and holds the
+    // number of conversations that need your input when there are any.
+    const count = settings.tabStatus ? needsYou() : 0;
+    favicon.show(
+      badge()?.color ??
+        (count ? STATUS_BADGES.waiting_for_confirmation.color : null),
+      count,
+    );
     renderBadge();
     onRender();
-  }
-
-  async function notify(id, title, next) {
-    if (window.Notification?.permission !== 'granted') return;
-    let body = STATUS_BADGES[next].label;
-    if (next === 'finished') {
-      const result = await host.agentServer
-        .request({ path: `/api/conversations/${id}/agent_final_response` })
-        .catch(() => null);
-      if (result?.response) body = plainText(result.response) || body;
-    }
-    if (disposed) return;
-    const notification = new Notification(title || 'OpenHands', {
-      body,
-      tag: `openhands-extras-${id}`,
-      icon: originalIconUrl(),
-    });
-    // Open the run it's about, which may not be the conversation on screen.
-    notification.onclick = () => {
-      window.focus();
-      if (id !== openId) host.navigate(`/conversations/${id}`);
-      notification.close();
-    };
   }
 
   function update(id, info) {
@@ -817,7 +822,14 @@ function watchAgentStatus(host, onRender) {
     if (!changedWhileAway) return;
     if (counting() && ENDED_STATUSES.has(next)) markUnseen(id, true);
     if (settings.notifications && NOTIFY_STATUSES.has(next)) {
-      notify(id, entry.title, next);
+      notify(host, {
+        id,
+        title: entry.title,
+        status: next,
+        icon: favicon.originalUrl(),
+        isOpen: () => id === openId,
+        isDisposed: () => disposed,
+      });
     }
     if (settings.confirmationSound && next === 'waiting_for_confirmation') {
       playChime();
@@ -929,7 +941,7 @@ function watchAgentStatus(host, onRender) {
   // Canvas rewrites the title on navigation, and may add icon links or reset
   // their href; re-apply the badge to both.
   const headObserver = new MutationObserver(() => {
-    applyIcon();
+    favicon.apply();
     renderTitle();
   });
   headObserver.observe(document.head, {
@@ -939,22 +951,20 @@ function watchAgentStatus(host, onRender) {
     attributes: true,
     attributeFilter: ['href'],
   });
-  // Another window marked or cleared a run: the open one can't be unseen
-  // while you're looking at it.
-  function onUnseen(event) {
-    if (event.key !== UNSEEN_KEY) return;
-    if (openId && !away()) markUnseen(openId, false);
-    render();
-  }
-
   document.addEventListener('visibilitychange', onReturn);
   window.addEventListener('focus', onReturn);
-  window.addEventListener('storage', onUnseen);
 
   return {
     statusOf: (id) => conversations.get(id)?.status ?? null,
     onDomChange() {
       if (watching()) requestCheck();
+    },
+    // Another window marked or cleared a run: the open one can't be unseen
+    // while you're looking at it.
+    onStorage(key) {
+      if (key !== UNSEEN_KEY) return;
+      if (openId && !away()) markUnseen(openId, false);
+      render();
     },
     // Also runs the first check, as activate() applies the initial settings.
     refresh() {
@@ -970,7 +980,6 @@ function watchAgentStatus(host, onRender) {
       clearTimeout(poll);
       document.removeEventListener('visibilitychange', onReturn);
       window.removeEventListener('focus', onReturn);
-      window.removeEventListener('storage', onUnseen);
       openId = null;
       conversations.clear();
       render();
@@ -983,45 +992,41 @@ export function activate(host) {
     throw new Error(`Extras requires host API 1, got ${host.apiVersion}.`);
   }
   loadSettings();
+  // Hiding "Running" and "Reading" pulses on the open conversation's status,
+  // and re-renders whenever that changes.
   const quietActivity = watchQuietActivity((id) => agentStatus.statusOf(id));
   const agentStatus = watchAgentStatus(host, () => quietActivity.refresh());
-  const themeColor = watchThemeColor();
-  const applyAll = () => {
-    applyWideCanvas(settings.wideCanvas);
-    agentStatus.refresh();
-    themeColor.refresh();
-    quietActivity.refresh();
-  };
-  // Settings changed in another tab: apply them and rebuild the card section.
-  const onStorage = (event) => {
-    if (event.key !== STORAGE_KEY) return;
-    loadSettings();
-    applyAll();
-    document.getElementById(SECTION_ID)?.remove();
+  // In dispose order: the agent status re-renders as it goes, so it comes
+  // before what it re-renders.
+  const features = [
+    watchAppCard(host.extension.name, (next) => {
+      saveSettings(next);
+      each('refresh');
+    }),
+    wideCanvas(),
+    agentStatus,
+    watchThemeColor(),
+    quietActivity,
+  ];
+  function each(method, ...args) {
+    for (const feature of features) feature[method]?.(...args);
+  }
+  // Settings changed in another tab apply here too.
+  const onStorage = ({ key }) => {
+    if (key === STORAGE_KEY) loadSettings();
+    each('onStorage', key);
+    if (key === STORAGE_KEY) each('refresh');
   };
   window.addEventListener('storage', onStorage);
-  applyAll();
-  const card = watchAppCard(host.extension.name, (next) => {
-    saveSettings(next);
-    applyAll();
-  });
+  each('refresh');
   // One body observer for all: Canvas renders the app card on Customize >
   // Apps, re-renders the chat as a run's events stream in, and may re-mount
   // its themed root.
-  const observer = new MutationObserver(() => {
-    card.onDomChange();
-    agentStatus.onDomChange();
-    themeColor.onDomChange();
-    quietActivity.onDomChange();
-  });
+  const observer = new MutationObserver(() => each('onDomChange'));
   observer.observe(document.body, { childList: true, subtree: true });
   return () => {
     observer.disconnect();
     window.removeEventListener('storage', onStorage);
-    card.dispose();
-    agentStatus.dispose();
-    themeColor.dispose();
-    quietActivity.dispose();
-    applyWideCanvas(false);
+    each('dispose');
   };
 }
