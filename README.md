@@ -1,18 +1,45 @@
 # Agent Canvas App: Extras
 
-An [OpenHands](https://www.openhands.dev/) Agent Canvas app which adds a few extra UI tweaks, along with agent status in your browser tab and desktop notifications.
+An [OpenHands](https://www.openhands.dev/) Agent Canvas app that adds a few UI tweaks: agent status in your browser tab and app icon, desktop notifications, and a quieter chat.
 
 ## Features
 
-| Name | Description |
+Each one is a switch in the Extras card, all off by default.
+
+| Name | What it does |
 | :-- | :-- |
-| **Wide Canvas** | Removes the maximum width cap from the chat window so the conversation fills the full canvas width. |
-| **Tab status** | Shows the open conversation's status in the browser tab. ⏳ ✋ ⏸️ ✅ or ❌, in place of Canvas's own status emoji, which shows ✅ even while the agent waits for your confirmation. The tab icon gets a matching coloured dot, numbered with how many conversations need your input, as the app icon badge counts them. Runs you opened in the tab that are still going elsewhere are counted too, like `⏳3` or `✅ ⏳2`. |
-| **Desktop notifications** | Notifies you when the agent finishes if the tab is in the background or the window isn't focused. |
-| **App icon badge** | Shows how many conversations need your input on the icon of Canvas installed as an app (Chrome, Edge or Safari's Add to Dock): every conversation waiting for your confirmation, plus runs that ended while you were away until you open them. The ended runs are remembered across reloads and shared by all your Canvas windows in this browser. Safari only shows it once notifications are allowed. |
-| **Hide "Running" and "Reading"** | Folds each stretch of the agent's "Running" and "Reading" entries into a "Thinking" entry, like Canvas's own, which expands to show them. Its messages, edits and timed out commands stay visible, and the last "Thinking" pulses while the conversation is running. The activity chip above the message box says "Thinking" for them too. Follows Canvas's language. |
-| **Title bar colour** | Matches the title bar of Canvas installed as an app to Canvas's colour theme, instead of white. |
-| **Confirmation sound** | Plays a short chime when the agent needs your confirmation if the tab is in the background or the window isn't focused. |
+| **Wide Canvas** | Lets the chat use the full width of the canvas. |
+| **Tab status** | Shows the agent's status in the tab's title and icon. |
+| **Desktop notifications** | Notifies you when the agent finishes or needs you while you're away. |
+| **Confirmation sound** | Chimes when the agent needs your confirmation while you're away. |
+| **App icon badge** | Counts the conversations that need your input on the installed app's icon. |
+| **Title bar colour** | Matches the installed app's title bar to Canvas's colour theme. |
+| **Hide "Running" and "Reading"** | Folds those chat entries into expandable "Thinking" entries. |
+
+"While you're away" means the tab is in the background or the window isn't focused.
+
+### Tab status
+
+- The title starts with ⏳ running, ✋ needs your confirmation, ⏸️ paused, ✅ finished or ❌ stopped. It replaces Canvas's own status emoji, which shows ✅ even while the agent waits for you, and is left out when the conversation's title already starts with it.
+- The tab icon gets a matching coloured dot, numbered with how many conversations need your input, counted as for the app icon badge.
+- Runs you opened in the tab that are still going elsewhere are counted, like `⏳3` or `✅ ⏳2`.
+
+### Desktop notifications
+
+- Shows the agent's final reply when it finishes, or why it stopped.
+- Clicking a notification opens its conversation.
+
+### App icon badge
+
+- Works when Canvas is installed as an app with Chrome or Edge, or Safari's Add to Dock. Safari only shows it once notifications are allowed.
+- Counts every conversation waiting for your confirmation, plus runs that ended while you were away until you open them. Those are remembered across reloads and shared by all your Canvas windows in this browser.
+
+### Hide "Running" and "Reading"
+
+- Each stretch of the agent's "Running" and "Reading" entries becomes one "Thinking" entry, like Canvas's own, which expands to show them.
+- The agent's messages, edits and timed out commands stay visible.
+- The last "Thinking" pulses while the conversation is running, and the activity chip above the message box says "Thinking" for those entries too.
+- Follows Canvas's language.
 
 ## Install
 
@@ -33,7 +60,7 @@ Feel free to propose more features in the issue queue.
 - The app is a single, dependency-free browser module: [`extension.js`](extension.js).
 - All settings are stored in the browser's `localStorage` under `openhands-extras:settings`, so they're per browser rather than per backend.
 - Canvas has no app API for settings, tab titles or page styles yet, so the app works with Canvas's markup directly: it adds its settings above the footer of its card (`data-testid="canvas-extension-card-agent-canvas-app-extras"`), and an OpenHands update that changes that markup can break a feature.
-- Tab status, notifications, the confirmation sound, the app icon badge and hiding "Running" and "Reading" ask the Agent Server for conversation statuses in one request (`GET /api/conversations?ids=…`), only while one of them is on: at most every 3 seconds while the chat is updating or when you come back to the tab, plus every 15 seconds while a run is going. Idle and finished conversations aren't polled.
+- While any feature other than Wide Canvas or Title bar colour is on, the app asks the Agent Server for conversation statuses in one request (`GET /api/conversations?ids=…`): at most every 3 seconds while the chat is updating or when you come back to the tab, plus every 15 seconds while a run is going. Idle and finished conversations aren't polled.
 - Tab status and the app icon badge also ask how many conversations are waiting for confirmation (`GET /api/conversations/count?status=waiting_for_confirmation`) with each check, and every 30 seconds otherwise, to catch runs started elsewhere. Runs that ended unseen are kept in `localStorage` under `openhands-extras:unseen`.
 
 ### Tests
