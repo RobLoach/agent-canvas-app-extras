@@ -65,17 +65,30 @@ const openConversationId = () =>
 // Canvas starts the open conversation's title with its own status emoji,
 // which Tab status replaces rather than adding a second.
 const CANVAS_TITLE_STATUS = /^(?:🟢|✅|⚪|🔴) /u;
+// Each label is English, and the key Canvas's translation of it, for its
+// other languages.
 const STATUS_BADGES = {
-  running: { emoji: '⏳', color: '#3b82f6', label: 'Running' },
+  running: { emoji: '⏳', color: '#3b82f6', label: 'Running', key: 'COMMON$RUNNING' },
   waiting_for_confirmation: {
     emoji: '✋',
     color: '#f59e0b',
     label: 'Needs your confirmation',
+    key: 'CHAT_INTERFACE$AGENT_AWAITING_USER_CONFIRMATION_MESSAGE',
   },
-  paused: { emoji: '⏸️', color: '#9ca3af', label: 'Paused' },
-  finished: { emoji: '✅', color: '#22c55e', label: 'Finished' },
-  error: { emoji: '❌', color: '#ef4444', label: 'Stopped with an error' },
-  stuck: { emoji: '❌', color: '#ef4444', label: 'Got stuck' },
+  paused: { emoji: '⏸️', color: '#9ca3af', label: 'Paused', key: 'COMMON$PAUSED' },
+  finished: { emoji: '✅', color: '#22c55e', label: 'Finished', key: 'COMMON$FINISHED' },
+  error: {
+    emoji: '❌',
+    color: '#ef4444',
+    label: 'Stopped with an error',
+    key: 'COMMON$ERROR',
+  },
+  stuck: {
+    emoji: '❌',
+    color: '#ef4444',
+    label: 'Got stuck',
+    key: 'AGENT_STATUS$AGENT_STOPPED',
+  },
 };
 // Active badges show whenever the status holds; the rest only after this tab
 // saw the run, until you come back to the tab.
@@ -179,6 +192,23 @@ function headElement(id, tag, { first = false } = {}) {
 }
 
 const removeElement = (id) => document.getElementById(id)?.remove();
+
+// Canvas keeps its UI language on <html lang>, and its translations at
+// /locales, which are fetched once per language. A failed fetch gives none,
+// leaving the English.
+const canvasLanguage = () => document.documentElement.lang || 'en';
+const translations = new Map();
+function canvasTranslations(language) {
+  if (!translations.has(language)) {
+    translations.set(
+      language,
+      fetch(`/locales/${encodeURIComponent(language)}/openhands.json`)
+        .then((response) => (response.ok ? response.json() : {}))
+        .catch(() => ({})),
+    );
+  }
+  return translations.get(language);
+}
 
 function toggleStyle(id, css, on) {
   if (!on) {
@@ -347,31 +377,27 @@ function watchQuietActivity(statusOf) {
     return !!id && statusOf(id) === 'running';
   };
 
-  // Canvas's translations for its UI language, which it keeps on <html lang>,
-  // falling back to English.
+  // Canvas's titles in its UI language, falling back to English.
   function loadLabels() {
-    const next = document.documentElement.lang || 'en';
+    const next = canvasLanguage();
     if (next === language) return;
     language = next;
     quietTitle = labelPattern(QUIET_LABELS);
     thinkingLabel = 'Thinking';
     if (next === 'en') return;
-    fetch(`/locales/${encodeURIComponent(next)}/openhands.json`)
-      .then((response) => (response.ok ? response.json() : {}))
-      .then((translations) => {
-        if (disposed || language !== next) return;
-        quietTitle = labelPattern(
-          Object.fromEntries(
-            Object.entries(QUIET_LABELS).map(([key, label]) => [
-              key,
-              translations[key] ?? label,
-            ]),
-          ),
-        );
-        thinkingLabel = translations[THINKING_KEY] ?? thinkingLabel;
-        apply();
-      })
-      .catch(() => {});
+    canvasTranslations(next).then((translated) => {
+      if (disposed || language !== next) return;
+      quietTitle = labelPattern(
+        Object.fromEntries(
+          Object.entries(QUIET_LABELS).map(([key, label]) => [
+            key,
+            translated[key] ?? label,
+          ]),
+        ),
+      );
+      thinkingLabel = translated[THINKING_KEY] ?? thinkingLabel;
+      apply();
+    });
   }
 
   function reveal() {
@@ -587,11 +613,15 @@ function plainText(markdown, max = 200) {
   return `${(space > cut.length / 2 ? cut.slice(0, space) : cut).trimEnd()}…`;
 }
 
-// Notify about a run's new status, with the agent's final reply when it
-// finished. Clicking opens the run, which may not be the one on screen.
+// Notify about a run's new status, in Canvas's language, with the agent's
+// final reply when it finished. Clicking opens the run, which may not be the
+// one on screen.
 async function notify(host, { id, title, status, icon, isOpen, isDisposed }) {
   if (window.Notification?.permission !== 'granted') return;
-  let body = STATUS_BADGES[status].label;
+  const { label, key } = STATUS_BADGES[status];
+  const language = canvasLanguage();
+  let body =
+    language === 'en' ? label : ((await canvasTranslations(language))[key] ?? label);
   if (status === 'finished') {
     const result = await host.agentServer
       .request({ path: `/api/conversations/${id}/agent_final_response` })

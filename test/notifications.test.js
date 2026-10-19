@@ -277,3 +277,33 @@ test('closes its audio when disabled', async (t) => {
   page.dispose();
   assert.equal(page.audioClosed, true);
 });
+
+test("says the status in Canvas's language", async (t) => {
+  const { page, host } = await watchRun(t);
+  page.document.documentElement.lang = 'de';
+  const fetched = [];
+  globalThis.fetch = async (url) => {
+    fetched.push(url);
+    return {
+      ok: true,
+      json: async () => ({
+        CHAT_INTERFACE$AGENT_AWAITING_USER_CONFIRMATION_MESSAGE:
+          'Agent wartet auf die Bestätigung des Benutzers für die ausstehende Aktion.',
+      }),
+    };
+  };
+  page.hidden = true;
+  await finish(page, host, A, 'waiting_for_confirmation');
+  await finish(page, host, A, 'running');
+  await finish(page, host, A, 'stuck');
+
+  assert.deepEqual(
+    page.notifications.map((notification) => notification.options.body),
+    [
+      'Agent wartet auf die Bestätigung des Benutzers für die ausstehende Aktion.',
+      // Untranslated, it stays English.
+      'Got stuck',
+    ],
+  );
+  assert.deepEqual(fetched, ['/locales/de/openhands.json'], 'fetched once');
+});

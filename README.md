@@ -26,7 +26,7 @@ Each one is a switch in the Extras card, all off by default.
 
 ### Desktop notifications
 
-- Shows the agent's final reply when it finishes, or why it stopped.
+- Shows the agent's final reply when it finishes, or why it stopped, in Canvas's language.
 - Clicking a notification opens its conversation.
 
 ### App icon badge
