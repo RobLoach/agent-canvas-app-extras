@@ -1,6 +1,6 @@
 // Extras: Agent Canvas tweaks, each switched on from this app's card on
 // Customize > Apps and saved in the browser's localStorage.
-// - Wide Canvas: removes the chat window's maximum width.
+// - Wide canvas: removes the chat window's maximum width.
 // - Tab status: badges the tab's title and icon with the agent's status.
 // - Desktop notifications: tells you when a run ends or needs you while
 //   you're away from it.
@@ -103,7 +103,7 @@ const NOTIFY_STATUSES = new Set(['waiting_for_confirmation', ...ENDED_STATUSES])
 const SWITCHES = [
   {
     key: 'wideCanvas',
-    label: 'Wide Canvas',
+    label: 'Wide canvas',
     description: 'Let the chat window use the full width of the canvas.',
   },
   {
