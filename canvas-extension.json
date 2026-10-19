@@ -2,7 +2,7 @@
   "schema_version": 1,
   "name": "agent-canvas-app-extras",
   "display_name": "Extras",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Wide chat layout, agent status in the browser tab, desktop notifications, a confirmation sound, an app icon badge, a themed title bar, quieter chat activity, and other extras.",
   "entrypoint": "extension.js"
 }

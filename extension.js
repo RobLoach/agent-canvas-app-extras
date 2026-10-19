@@ -136,7 +136,9 @@ const DEFAULT_SETTINGS = Object.fromEntries(
 );
 
 // Class strings mirror Canvas's ToggleSwitchVisual (src/ui/toggle-switch.tsx)
-// so the switch picks up the same compiled Tailwind styles.
+// so the switch picks up the same compiled Tailwind styles. The checkbox it
+// stands for says it's a switch, as Canvas's own do, and its hint is read out
+// when it changes, e.g. to say why a switch turned itself back off.
 const TRACK_CLASS =
   'relative inline-flex shrink-0 items-center rounded-full transition-colors duration-200 ease-in-out motion-reduce:transition-none h-5.5 w-10 border';
 const TRACK_ON_CLASS = 'border-contrast bg-contrast';
@@ -300,13 +302,13 @@ function labelPattern(labels) {
 }
 
 // Canvas's own "Thinking" entry, with its chevron and lightbulb, as a toggle
-// for the entries it folds.
+// for the entries it folds, with Canvas's focus ring for keyboard use.
 function buildThinking(onToggle) {
   const row = document.createElement('div');
   row.className = 'my-1 w-full py-1 text-sm';
   row.setAttribute(THINKING_ATTR, '');
   row.innerHTML = `
-    <button type="button" aria-expanded="false" class="w-full flex items-center gap-2 text-left cursor-pointer">
+    <button type="button" aria-expanded="false" class="w-full flex items-center gap-2 text-left cursor-pointer rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">
       <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="h-4 w-4 fill-muted flex-shrink-0"><path/></svg>
       <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-muted flex-shrink-0"><path fill="currentColor" d="${LIGHTBULB_PATH}"/></svg>
       <span class="font-normal text-muted"></span>
@@ -494,7 +496,10 @@ function watchQuietActivity(statusOf) {
       if (chevron.getAttribute('d') !== path) chevron.setAttribute('d', path);
       const label = thinking.querySelector('span');
       if (label.textContent !== thinkingLabel) label.textContent = thinkingLabel;
-      label.classList.toggle('animate-pulse', pulsing && last === items.at(-1));
+      // Canvas's own pulse, which stops for people who ask for less motion.
+      const pulse = pulsing && last === items.at(-1);
+      label.classList.toggle('animate-pulse', pulse);
+      label.classList.toggle('motion-reduce:animate-none', pulse);
       if (last.item.lastElementChild !== thinking) last.item.append(thinking);
     }
     for (const { item, rows } of items) {
@@ -611,13 +616,13 @@ function buildSwitch(item, onChange) {
   block.className = 'flex min-w-0 flex-col gap-1';
   block.innerHTML = `
     <label class="flex items-center gap-2 rounded-sm has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-focus w-fit cursor-pointer">
-      <input class="sr-only" type="checkbox" data-testid="extras-${item.key}-switch" aria-describedby="extras-${item.key}-hint" />
+      <input class="sr-only" type="checkbox" role="switch" data-testid="extras-${item.key}-switch" aria-describedby="extras-${item.key}-hint" />
       <span aria-hidden="true"><span></span></span>
-      <div class="flex items-center gap-1">
+      <span class="flex items-center gap-1">
         <span class="text-sm"></span>
-      </div>
+      </span>
     </label>
-    <p id="extras-${item.key}-hint" class="text-xs leading-relaxed text-tertiary-light"></p>`;
+    <p id="extras-${item.key}-hint" class="text-xs leading-relaxed text-tertiary-light" aria-live="polite"></p>`;
 
   const input = block.querySelector('input');
   const track = input.nextElementSibling;

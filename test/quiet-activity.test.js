@@ -261,3 +261,19 @@ test("leaves rows alone when Canvas's markup doesn't have their wrapper", async 
   assert.equal(toggles(page).length, 0);
   assert.deepEqual(shown(page), ['Running ls', 'Reading a.js', 'Done.']);
 });
+
+test('the Thinking toggle has a focus ring and a pulse that respects reduced motion', async (t) => {
+  const page = openChat(t, [item(row('Running <strong>ls</strong>'))]);
+  await activateExtension(page, fakeHost({ statuses: { [ID]: 'running' } }));
+  await settle();
+  const [thinking] = toggles(page);
+  const button = thinking.querySelector('button');
+  for (const name of ['focus-visible:outline-2', 'focus-visible:outline-offset-2', 'focus-visible:outline-focus']) {
+    assert.ok(button.classList.contains(name), name);
+  }
+  const label = thinking.querySelector('span');
+  assert.deepEqual(
+    ['animate-pulse', 'motion-reduce:animate-none'].map((name) => label.classList.contains(name)),
+    [true, true],
+  );
+});

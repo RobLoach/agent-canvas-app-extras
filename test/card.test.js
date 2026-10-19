@@ -94,3 +94,16 @@ test('explains when notifications are on but permission was revoked', async (t) 
   assert.equal(switchFor(page, 'notifications').checked, true);
   assert.match(hintFor(page, 'notifications'), /blocked/);
 });
+
+test('presents each setting as a switch, with a hint read out as it changes', async (t) => {
+  const page = setupPage(t, { body: CARDS });
+  await activateExtension(page, fakeHost());
+
+  for (const key of ['wideCanvas', 'notifications']) {
+    const input = switchFor(page, key);
+    assert.equal(input.getAttribute('role'), 'switch', key);
+    assert.equal(input.closest('label').querySelector('div'), null, 'only phrasing content in a label');
+    const hint = page.document.getElementById(input.getAttribute('aria-describedby'));
+    assert.equal(hint.getAttribute('aria-live'), 'polite', key);
+  }
+});
