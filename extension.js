@@ -330,6 +330,7 @@ const expanded = (thinking) =>
 // observer only watches child lists, so marking doesn't re-trigger it.
 function watchQuietActivity(statusOf) {
   let active = false;
+  let disposed = false;
   let language = null;
   let quietTitle = labelPattern(QUIET_LABELS);
   let thinkingLabel = 'Thinking';
@@ -354,7 +355,7 @@ function watchQuietActivity(statusOf) {
     fetch(`/locales/${encodeURIComponent(next)}/openhands.json`)
       .then((response) => (response.ok ? response.json() : {}))
       .then((translations) => {
-        if (language !== next) return;
+        if (disposed || language !== next) return;
         quietTitle = labelPattern(
           Object.fromEntries(
             Object.entries(QUIET_LABELS).map(([key, label]) => [
@@ -391,7 +392,10 @@ function watchQuietActivity(statusOf) {
     const rows = [];
     const quiet = [];
     for (const title of item.querySelectorAll(EVENT_TITLE)) {
-      const row = title.parentElement.parentElement;
+      // Only a row inside the item: were Canvas to drop a wrapper, this would
+      // otherwise hide the item, or the whole chat.
+      const row = title.parentElement?.parentElement;
+      if (!row || row === item || !item.contains(row)) continue;
       rows.push(row);
       if (
         quietTitle.test(title.textContent.trim()) &&
@@ -448,6 +452,7 @@ function watchQuietActivity(statusOf) {
   }
 
   function apply() {
+    if (disposed) return;
     if (!settings.quietActivity) {
       if (active) reveal();
       active = false;
@@ -510,6 +515,7 @@ function watchQuietActivity(statusOf) {
       if (active && running() !== pulsing) apply();
     },
     dispose() {
+      disposed = true;
       reveal();
       active = false;
     },
@@ -531,6 +537,12 @@ function unlockAudio() {
   audio ??= new Context();
   audio.resume?.();
   return null;
+}
+
+function closeAudio() {
+  if (!audio) return;
+  Promise.resolve(audio.close?.()).catch(() => {});
+  audio = null;
 }
 
 // Two short falling tones, made on the fly so the app needs no sound file.
@@ -698,7 +710,9 @@ function faviconBadge() {
   const badgedHrefs = new Set();
   let href = null;
   let shown = null;
-  let source;
+  // Canvas's icon as a data URL, for the icon URL it was loaded from.
+  let source = null;
+  let sourceUrl;
   const links = () => document.head.querySelectorAll('link[rel~="icon"]');
 
   function originalUrl() {
@@ -726,8 +740,14 @@ function faviconBadge() {
       apply();
       return;
     }
-    source ??= loadDataUrl(originalUrl());
+    const url = originalUrl();
+    if (url !== sourceUrl) {
+      sourceUrl = url;
+      source = loadDataUrl(url);
+    }
     const image = await source;
+    // Try again next time rather than keep a failed load.
+    if (!image) sourceUrl = undefined;
     if (shown !== key) return;
     const background = image
       ? `<image href="${image}" width="32" height="32"/>`
@@ -780,15 +800,20 @@ function watchAgentStatus(host, onRender) {
     const ids = readJson(UNSEEN_KEY, []);
     return new Set(Array.isArray(ids) ? ids : []);
   };
-  const needsYou = () => (counting() ? waiting + loadUnseen().size : 0);
+  const needsYou = () =>
+    !disposed && counting() ? waiting + loadUnseen().size : 0;
 
   function markUnseen(id, unseen) {
     const ids = loadUnseen();
     if (ids.has(id) === unseen) return;
     if (unseen) ids.add(id);
     else ids.delete(id);
-    if (ids.size) localStorage.setItem(UNSEEN_KEY, JSON.stringify([...ids]));
-    else localStorage.removeItem(UNSEEN_KEY);
+    try {
+      if (ids.size) localStorage.setItem(UNSEEN_KEY, JSON.stringify([...ids]));
+      else localStorage.removeItem(UNSEEN_KEY);
+    } catch {
+      // Storage full or blocked: the badge just won't count this run.
+    }
   }
 
   function badge() {
@@ -823,7 +848,7 @@ function watchAgentStatus(host, onRender) {
     const current = document.title;
     const base = current === appliedTitle?.title ? appliedTitle.base : current;
     let next = base;
-    if (settings.tabStatus) {
+    if (settings.tabStatus && !disposed) {
       const canvasStatus = base.match(CANVAS_TITLE_STATUS)?.[0] ?? '';
       const rest = base.slice(canvasStatus.length);
       const prefix =
@@ -860,7 +885,7 @@ function watchAgentStatus(host, onRender) {
       count,
     );
     renderBadge();
-    onRender();
+    if (!disposed) onRender();
   }
 
   function update(id, info) {
@@ -887,7 +912,7 @@ function watchAgentStatus(host, onRender) {
         icon: favicon.originalUrl(),
         isOpen: () => id === openId,
         isDisposed: () => disposed,
-      });
+      }).catch(() => {});
     }
     if (settings.confirmationSound && next === 'waiting_for_confirmation') {
       playChime();
@@ -935,6 +960,8 @@ function watchAgentStatus(host, onRender) {
                 .catch(() => waiting)
             : 0,
         ]);
+        // Anything but a list would read as every run gone: keep what's known.
+        if (!Array.isArray(infos)) throw new Error('Unexpected statuses');
         if (!disposed) {
           waiting = Number(count) || 0;
           ids.forEach((id, index) => {
@@ -977,11 +1004,11 @@ function watchAgentStatus(host, onRender) {
   function requestCheck() {
     const wait = lastCheck + STATUS_MIN_GAP_MS - Date.now();
     if (wait <= 0) {
-      check();
+      check().catch(() => {});
     } else if (!trailing) {
       trailing = setTimeout(() => {
         trailing = 0;
-        check();
+        check().catch(() => {});
       }, wait);
     }
   }
@@ -1093,6 +1120,7 @@ export function activate(host) {
     observer.disconnect();
     window.removeEventListener('storage', onStorage);
     each('dispose');
+    closeAudio();
   };
   window[INSTANCE] = dispose;
   return dispose;

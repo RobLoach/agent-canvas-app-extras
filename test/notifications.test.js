@@ -224,3 +224,56 @@ test('drops unseen runs that were resumed or deleted elsewhere', async (t) => {
   assert.equal(page.window.localStorage.getItem('openhands-extras:unseen'), null);
   assert.equal(page.badge, 0);
 });
+
+test('keeps the unseen runs when the server answers unexpectedly', async (t) => {
+  const page = setupPage(t, { url: 'https://canvas.test/apps' });
+  page.settings({ appBadge: true });
+  page.window.localStorage.setItem('openhands-extras:unseen', JSON.stringify([A]));
+  const host = fakeHost();
+  let answer = { detail: 'Bad gateway' };
+  host.agentServer.request = async ({ path }) => {
+    if (!path.startsWith('/api/conversations?')) return 0;
+    if (answer instanceof Error) throw answer;
+    return answer;
+  };
+  await activateExtension(page, host);
+  await settle();
+  assert.equal(page.window.localStorage.getItem('openhands-extras:unseen'), JSON.stringify([A]));
+  assert.equal(page.badge, 1);
+
+  answer = new Error('Offline');
+  page.checkNow();
+  await settle();
+  assert.equal(page.window.localStorage.getItem('openhands-extras:unseen'), JSON.stringify([A]));
+});
+
+test('a notification the browser refuses is not an unhandled error', async (t) => {
+  const unhandled = [];
+  const onUnhandled = (reason) => unhandled.push(reason);
+  process.on('unhandledRejection', onUnhandled);
+  t.after(() => process.off('unhandledRejection', onUnhandled));
+  const { page, host } = await watchRun(t);
+  // As on Android, where only service workers may show notifications.
+  class Refusing {
+    static permission = 'granted';
+    constructor() {
+      throw new TypeError('Illegal constructor');
+    }
+  }
+  page.window.Notification = Refusing;
+  globalThis.Notification = Refusing;
+  page.hidden = true;
+  await finish(page, host);
+  await settle();
+  assert.deepEqual(unhandled, []);
+});
+
+test('closes its audio when disabled', async (t) => {
+  const { page, host } = await watchRun(t, { confirmationSound: true });
+  page.hidden = true;
+  await finish(page, host, A, 'waiting_for_confirmation');
+  assert.deepEqual(page.tones, [880, 660]);
+
+  page.dispose();
+  assert.equal(page.audioClosed, true);
+});

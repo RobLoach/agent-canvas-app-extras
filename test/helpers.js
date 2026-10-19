@@ -26,6 +26,7 @@ export function setupPage(
     fetched: [],
     tones: [],
     badge: undefined,
+    audioClosed: false,
   };
 
   Object.defineProperty(window.document, 'hidden', { get: () => page.hidden });
@@ -62,6 +63,10 @@ export function setupPage(
     currentTime = 0;
     destination = {};
     resume() {}
+    close() {
+      page.audioClosed = true;
+      return Promise.resolve();
+    }
     createGain() {
       const ramp = () => {};
       return { gain: { setValueAtTime: ramp, exponentialRampToValueAtTime: ramp }, connect: (node) => node };

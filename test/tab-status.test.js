@@ -243,3 +243,39 @@ test("leaves Canvas's title as it is while tab status is off", async (t) => {
   await settle();
   assert.equal(page.document.title, '✅ ✅🔧 Miscellaneous Request | OpenHands');
 });
+
+test('takes its badges and title changes back when disabled', async (t) => {
+  const OTHER = 'fedcba9876543210fedcba9876543210';
+  const page = openConversation(t, { tabStatus: true, appBadge: true });
+  canvasTitle(page, '✅ ✅🔧 Misc | OpenHands');
+  const host = fakeHost({
+    statuses: { [ID]: 'running', [OTHER]: 'waiting_for_confirmation' },
+  });
+  const dispose = await activateExtension(page, host);
+  assert.equal(await drawnIcon(page, '#3b82f6'), '#3b82f6');
+  assert.equal(page.badge, 1);
+  assert.equal(page.document.title, '⏳ ✅🔧 Misc | OpenHands');
+
+  dispose();
+  assert.equal(page.badge, 0);
+  assert.equal(iconColor(page), 'canvas');
+  assert.equal(page.document.title, '✅ ✅🔧 Misc | OpenHands');
+});
+
+test("redraws the dot on Canvas's own icon when that changes", async (t) => {
+  const page = openConversation(t);
+  const host = fakeHost({ statuses: { [ID]: 'running' } });
+  await activateExtension(page, host);
+  assert.equal(await drawnIcon(page, '#3b82f6'), '#3b82f6');
+
+  // Canvas switches icons, e.g. with its theme.
+  page.document.querySelector('link').setAttribute('href', '/favicon-light.svg');
+  await settle();
+  host.statuses[ID] = 'finished';
+  page.checkNow();
+  assert.equal(await drawnIcon(page, '#22c55e'), '#22c55e');
+  assert.deepEqual(page.fetched, [
+    'https://canvas.test/favicon.svg',
+    'https://canvas.test/favicon-light.svg',
+  ]);
+});

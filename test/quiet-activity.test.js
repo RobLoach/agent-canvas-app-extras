@@ -225,3 +225,39 @@ test('says Thinking on the activity chip while it shows a folded title', async (
   page.checkNow();
   assert.equal(visible(), '|Reading b.js');
 });
+
+test('a translation that arrives after disabling changes nothing', async (t) => {
+  const page = openChat(t, [item(row('Führt <strong>ls</strong> aus'))]);
+  page.document.documentElement.lang = 'de';
+  let release;
+  globalThis.fetch = () =>
+    new Promise((resolve) => {
+      release = () =>
+        resolve({
+          ok: true,
+          json: async () => ({ ACTION_MESSAGE$RUN: 'Führt <cmd>{{command}}</cmd> aus' }),
+        });
+    });
+  const dispose = await activateExtension(page, fakeHost());
+  dispose();
+  release();
+  await settle();
+
+  assert.equal(toggles(page).length, 0);
+  assert.equal(page.document.querySelector('[data-extras-quiet]'), null);
+  assert.equal(page.document.getElementById('openhands-extras-quiet-activity'), null);
+});
+
+test("leaves rows alone when Canvas's markup doesn't have their wrapper", async (t) => {
+  const page = openChat(t, [
+    // The title's grandparent is the chat, or the item itself.
+    '<div><div data-testid="generic-event-message-title"><span>Running ls</span></div></div>',
+    '<div><div><div data-testid="generic-event-message-title"><span>Reading a.js</span></div></div></div>',
+    item(message('Done.')),
+  ]);
+  await activateExtension(page, fakeHost());
+
+  assert.equal(page.document.querySelector('[data-extras-quiet]'), null);
+  assert.equal(toggles(page).length, 0);
+  assert.deepEqual(shown(page), ['Running ls', 'Reading a.js', 'Done.']);
+});
