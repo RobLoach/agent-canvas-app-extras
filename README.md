@@ -4,8 +4,6 @@ An [OpenHands](https://www.openhands.dev/) Agent Canvas app that adds a few UI t
 
 ## Features
 
-Each one is a switch in the Extras card, all off by default.
-
 | Name | What it does |
 | :-- | :-- |
 | **Wide Canvas** | Lets the chat use the full width of the canvas. |
@@ -15,8 +13,6 @@ Each one is a switch in the Extras card, all off by default.
 | **App icon badge** | Counts the conversations that need your input on the installed app's icon. |
 | **Title bar colour** | Matches the installed app's title bar to Canvas's colour theme. |
 | **Hide "Running" and "Reading"** | Folds those chat entries into expandable "Thinking" entries. |
-
-"While you're away" means the tab is in the background or the window isn't focused.
 
 ### Tab status
 
