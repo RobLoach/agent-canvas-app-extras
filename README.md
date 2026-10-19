@@ -10,6 +10,7 @@ An [OpenHands](https://www.openhands.dev/) Agent Canvas app which adds a few ext
 | **Tab status** | Shows the open conversation's status in the browser tab. ⏳ ✋ ⏸️ ✅ or ❌. The tab icon gets a matching coloured dot, numbered with how many conversations need your input, as the app icon badge counts them. Runs you opened in the tab that are still going elsewhere are counted too, like `⏳3` or `✅ ⏳2`. |
 | **Desktop notifications** | Notifies you when the agent finishes if the tab is in the background or the window isn't focused. |
 | **App icon badge** | Shows how many conversations need your input on the icon of Canvas installed as an app (Chrome, Edge or Safari's Add to Dock): every conversation waiting for your confirmation, plus runs that ended while you were away until you open them. The ended runs are remembered across reloads and shared by all your Canvas windows in this browser. Safari only shows it once notifications are allowed. |
+| **Hide "Running" and "Reading"** | Hides the agent's "Running" and "Reading" entries in the chat, keeping its messages and edits. While it works through them, "Thinking" shows at the bottom instead, like Canvas's own thinking entries. Matches Canvas's English titles. |
 | **Title bar colour** | Matches the title bar of Canvas installed as an app to Canvas's colour theme, instead of white. |
 | **Confirmation sound** | Plays a short chime when the agent needs your confirmation if the tab is in the background or the window isn't focused. |
 
