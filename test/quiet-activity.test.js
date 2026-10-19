@@ -137,7 +137,7 @@ test("uses Canvas's translations for the page's language", async (t) => {
     item(row('Führt <strong>ls</strong> aus')),
     item(row('Running <strong>ls</strong>')),
   ]);
-  page.window.localStorage.setItem('i18nextLng', 'de');
+  page.document.documentElement.lang = 'de';
   const fetched = [];
   globalThis.fetch = async (url) => {
     fetched.push(url);
@@ -172,4 +172,56 @@ test('leaves the chat alone while off, and restores it when disabled', async (t)
   assert.deepEqual(shown(page), ['Running ls']);
   assert.equal(page.document.querySelector('[data-extras-quiet], [data-extras-shown]'), null);
   assert.equal(page.document.getElementById('openhands-extras-quiet-activity'), null);
+});
+
+test('a second copy of the app stops the first, rather than fighting it', async (t) => {
+  const page = openChat(t, [
+    item(row('Running <strong>ls</strong>')),
+    item(message('Done.')),
+  ]);
+  const first = await activateExtension(page, fakeHost());
+  // A fresh copy of the module, as Canvas imports one per activation.
+  const { activate } = await import(`../extension.js?second=${Date.now()}`);
+  const second = activate(fakeHost());
+  page.mutate();
+  await settle();
+
+  assert.equal(toggles(page).length, 1);
+  assert.deepEqual(shown(page), ['Thinking', 'Done.']);
+  first();
+  assert.equal(toggles(page).length, 1, "the first copy's late dispose leaves the second alone");
+  second();
+  second();
+  assert.equal(toggles(page).length, 0);
+});
+
+test('says Thinking on the activity chip while it shows a folded title', async (t) => {
+  const page = openChat(t, [item(message('On it.'))]);
+  page.document.body.insertAdjacentHTML(
+    'beforeend',
+    '<div data-testid="live-activity-chip" role="status"><span aria-hidden="true" class="size-1.5"></span><span class="min-w-0 truncate">Running <strong>ls</strong></span></div>',
+  );
+  await activateExtension(page, fakeHost());
+  const chip = page.document.querySelector('[data-testid="live-activity-chip"]');
+  const canvasLabel = chip.children[1];
+  const visible = () =>
+    [...chip.children]
+      .filter((child) => !child.matches('[data-extras-quiet]'))
+      .map((child) => child.textContent)
+      .join('|');
+  assert.equal(visible(), '|Thinking');
+  assert.equal(chip.lastElementChild.className, 'min-w-0 truncate');
+
+  // React updates its own label, which shows again for anything else.
+  canvasLabel.innerHTML = 'Editing <code>a.js</code>';
+  await settle();
+  assert.equal(visible(), '|Editing a.js');
+
+  canvasLabel.innerHTML = 'Reading <code>b.js</code>';
+  await settle();
+  assert.equal(visible(), '|Thinking');
+
+  page.settings({});
+  page.checkNow();
+  assert.equal(visible(), '|Reading b.js');
 });

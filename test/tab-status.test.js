@@ -93,16 +93,16 @@ test('only shows finished after seeing the run', async (t) => {
 
 test('leaves a title that already starts with a badge emoji alone', async (t) => {
   const page = openConversation(t);
-  page.document.querySelector('title').firstChild.nodeValue = '✅ Release checklist';
+  page.document.querySelector('title').firstChild.nodeValue = '✋ Release checklist';
   const host = fakeHost({ statuses: { [ID]: 'idle' } });
   await activateExtension(page, host);
   await settle();
-  assert.equal(page.document.title, '✅ Release checklist');
+  assert.equal(page.document.title, '✋ Release checklist');
 
   host.statuses[ID] = 'running';
   page.checkNow();
   await settle();
-  assert.equal(page.document.title, '⏳ ✅ Release checklist');
+  assert.equal(page.document.title, '⏳ ✋ Release checklist');
 });
 
 test('does not repeat a badge emoji the title already starts with', async (t) => {
@@ -197,4 +197,49 @@ test('counts runs still going in conversations you navigated away from', async (
   page.checkNow();
   await settle();
   assert.equal(page.document.title, '✅ My chat');
+});
+
+// Canvas's own title: its status emoji, the conversation's title, then the app.
+const canvasTitle = (page, text) => {
+  page.document.querySelector('title').firstChild.nodeValue = text;
+};
+
+test("replaces Canvas's own status emoji instead of adding a second", async (t) => {
+  const page = openConversation(t);
+  canvasTitle(page, '🟢 My chat | OpenHands');
+  const host = fakeHost({ statuses: { [ID]: 'running' } });
+  await activateExtension(page, host);
+  await settle();
+  assert.equal(page.document.title, '⏳ My chat | OpenHands');
+
+  // Canvas shows ✅ while waiting for confirmation too; ours says what it is.
+  host.statuses[ID] = 'waiting_for_confirmation';
+  canvasTitle(page, '✅ My chat | OpenHands');
+  page.checkNow();
+  await settle();
+  assert.equal(page.document.title, '✋ My chat | OpenHands');
+
+  // With no badge of ours, Canvas's comes back.
+  host.statuses[ID] = 'idle';
+  page.checkNow();
+  await settle();
+  page.returnToTab();
+  await settle();
+  assert.equal(page.document.title, '✅ My chat | OpenHands');
+});
+
+test('drops a status emoji the conversation title already starts with', async (t) => {
+  const page = openConversation(t);
+  canvasTitle(page, '✅ ✅🔧 Miscellaneous Request | OpenHands');
+  await activateExtension(page, fakeHost({ statuses: { [ID]: 'finished' } }));
+  await settle();
+  assert.equal(page.document.title, '✅🔧 Miscellaneous Request | OpenHands');
+});
+
+test("leaves Canvas's title as it is while tab status is off", async (t) => {
+  const page = openConversation(t, { notifications: true });
+  canvasTitle(page, '✅ ✅🔧 Miscellaneous Request | OpenHands');
+  await activateExtension(page, fakeHost({ statuses: { [ID]: 'running' } }));
+  await settle();
+  assert.equal(page.document.title, '✅ ✅🔧 Miscellaneous Request | OpenHands');
 });

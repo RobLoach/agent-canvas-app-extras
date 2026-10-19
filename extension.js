@@ -9,12 +9,16 @@
 //   app's icon.
 // - Title bar colour: matches the installed app's title bar to Canvas's theme.
 // - Hide "Running" and "Reading": folds those chat entries into "Thinking"
-//   rows that expand to show them.
+//   rows that expand to show them, and says "Thinking" on the activity chip.
 //
 // Each feature is an object with any of refresh() (settings changed),
 // onDomChange(), onStorage(key) and dispose(), which activate() calls.
 
 const STORAGE_KEY = 'openhands-extras:settings';
+// The running copy's dispose, on the page's window. Canvas disposes an app
+// before activating it again, but two copies folding the same chat, e.g.
+// after a dispose that failed part way, would undo each other's work forever.
+const INSTANCE = Symbol.for('openhands-extras');
 // Runs that ended while you were away, shared by every Canvas window and kept
 // across reloads until you open them.
 const UNSEEN_KEY = 'openhands-extras:unseen';
@@ -25,6 +29,7 @@ const QUIET_STYLE_ID = 'openhands-extras-quiet-activity';
 const QUIET_ATTR = 'data-extras-quiet';
 const SHOWN_ATTR = 'data-extras-shown';
 const THINKING_ATTR = 'data-extras-thinking';
+const CHIP_LABEL_ATTR = 'data-extras-chip-label';
 const EVENT_TITLE = '[data-testid="generic-event-message-title"]';
 // Canvas's titles for commands and file reads, before and after, in English
 // until its translations for the page's language load.
@@ -55,6 +60,9 @@ const COUNT_POLL_MS = 30000;
 const WAITING_COUNT_PATH =
   '/api/conversations/count?status=waiting_for_confirmation';
 const CONVERSATION_PATH = /\/conversations\/([0-9a-f-]{32,36})(?:\/|$)/i;
+// Canvas starts the open conversation's title with its own status emoji,
+// which Tab status replaces rather than adding a second.
+const CANVAS_TITLE_STATUS = /^(?:🟢|✅|⚪|🔴) /u;
 const STATUS_BADGES = {
   running: { emoji: '⏳', color: '#3b82f6', label: 'Running' },
   waiting_for_confirmation: {
@@ -176,6 +184,13 @@ function toggleStyle(id, css, on) {
   const style = headElement(id, 'style');
   if (style.textContent !== css) style.textContent = css;
 }
+
+// The elements this app adds to Canvas's page body.
+const OWN_SELECTOR = `#${SECTION_ID}, [${THINKING_ATTR}], [${CHIP_LABEL_ATTR}]`;
+const ownNode = (node) => node.nodeType === Node.ELEMENT_NODE && node.matches(OWN_SELECTOR);
+const ownChange = (record) =>
+  !!record.target.closest?.(OWN_SELECTOR) ||
+  [...record.addedNodes, ...record.removedNodes].every(ownNode);
 
 const setAttr = (element, name, on) => {
   if (element.hasAttribute(name) !== on) element.toggleAttribute(name, on);
@@ -320,11 +335,17 @@ function watchQuietActivity(statusOf) {
   let thinkingLabel = 'Thinking';
   // Each stretch's toggle, by the stretch's first chat item.
   let toggles = new WeakMap();
+  // Whether the last stretch pulses, for the open conversation running.
+  let pulsing = false;
+  const running = () => {
+    const id = location.pathname.match(CONVERSATION_PATH)?.[1];
+    return !!id && statusOf(id) === 'running';
+  };
 
-  // Canvas's translations for its UI language, falling back to English.
+  // Canvas's translations for its UI language, which it keeps on <html lang>,
+  // falling back to English.
   function loadLabels() {
-    const next =
-      localStorage.getItem('i18nextLng') || document.documentElement.lang || 'en';
+    const next = document.documentElement.lang || 'en';
     if (next === language) return;
     language = next;
     quietTitle = labelPattern(QUIET_LABELS);
@@ -355,8 +376,10 @@ function watchQuietActivity(statusOf) {
       element.removeAttribute(QUIET_ATTR);
       element.removeAttribute(SHOWN_ATTR);
     }
-    for (const thinking of document.querySelectorAll(`[${THINKING_ATTR}]`)) {
-      thinking.remove();
+    for (const ours of document.querySelectorAll(
+      `[${THINKING_ATTR}], [${CHIP_LABEL_ATTR}]`,
+    )) {
+      ours.remove();
     }
     toggleStyle(QUIET_STYLE_ID, '', false);
     toggles = new WeakMap();
@@ -365,16 +388,18 @@ function watchQuietActivity(statusOf) {
   // Each chat item's event rows, the quiet ones among them, and whether
   // they're all it shows.
   function readItem(item) {
-    const rows = [...item.querySelectorAll(EVENT_TITLE)].map(
-      (title) => title.parentElement.parentElement,
-    );
-    const quiet = rows.filter((row) => {
-      const title = row.querySelector(EVENT_TITLE);
-      return (
+    const rows = [];
+    const quiet = [];
+    for (const title of item.querySelectorAll(EVENT_TITLE)) {
+      const row = title.parentElement.parentElement;
+      rows.push(row);
+      if (
         quietTitle.test(title.textContent.trim()) &&
         !row.querySelector('[data-testid="status-icon"]')
-      );
-    });
+      ) {
+        quiet.push(row);
+      }
+    }
     const children = [...item.children].filter(
       (child) => !child.hasAttribute(THINKING_ATTR),
     );
@@ -400,6 +425,28 @@ function watchQuietActivity(statusOf) {
     return found;
   }
 
+  // The live activity chip above the message box says "Running …" too: show
+  // "Thinking" in a label of ours beside Canvas's, which React keeps updating.
+  function relabelChip() {
+    const chip = document.querySelector('[data-testid="live-activity-chip"]');
+    if (!chip) return;
+    let ours = chip.querySelector(`:scope > [${CHIP_LABEL_ATTR}]`);
+    const label = [...chip.children].findLast((child) => child !== ours);
+    const quiet = !!label && quietTitle.test(label.textContent.trim());
+    if (label) setAttr(label, QUIET_ATTR, quiet);
+    if (!quiet) {
+      ours?.remove();
+      return;
+    }
+    if (!ours) {
+      ours = document.createElement('span');
+      ours.className = label.className;
+      ours.setAttribute(CHIP_LABEL_ATTR, '');
+    }
+    if (ours.textContent !== thinkingLabel) ours.textContent = thinkingLabel;
+    if (label.nextElementSibling !== ours) label.after(ours);
+  }
+
   function apply() {
     if (!settings.quietActivity) {
       if (active) reveal();
@@ -413,11 +460,11 @@ function watchQuietActivity(statusOf) {
       `[${QUIET_ATTR}]:not([${SHOWN_ATTR}]) { display: none !important; }`,
       true,
     );
+    relabelChip();
     const chat = document.querySelector('[data-testid="chat-scroll-container"]');
     if (!chat) return;
     const items = [...chat.children].map(readItem);
-    const id = location.pathname.match(CONVERSATION_PATH)?.[1];
-    const running = id && statusOf(id) === 'running';
+    pulsing = running();
     // Hide whole items, except the last of each stretch, which holds the
     // toggle and hides just its rows.
     const hidden = new Map();
@@ -440,10 +487,7 @@ function watchQuietActivity(statusOf) {
       if (chevron.getAttribute('d') !== path) chevron.setAttribute('d', path);
       const label = thinking.querySelector('span');
       if (label.textContent !== thinkingLabel) label.textContent = thinkingLabel;
-      label.classList.toggle(
-        'animate-pulse',
-        !!running && last === items.at(-1),
-      );
+      label.classList.toggle('animate-pulse', pulsing && last === items.at(-1));
       if (last.item.lastElementChild !== thinking) last.item.append(thinking);
     }
     for (const { item, rows } of items) {
@@ -460,6 +504,11 @@ function watchQuietActivity(statusOf) {
   return {
     onDomChange: apply,
     refresh: apply,
+    // Statuses are checked every few seconds; only the open conversation
+    // starting or stopping changes anything here.
+    onStatus() {
+      if (active && running() !== pulsing) apply();
+    },
     dispose() {
       reveal();
       active = false;
@@ -704,7 +753,8 @@ function watchAgentStatus(host, onRender) {
   const conversations = new Map();
   const favicon = faviconBadge();
   let openId = null;
-  let appliedPrefix = '';
+  // The title we last set, and the one of Canvas's it came from.
+  let appliedTitle = null;
   let appliedBadge = null;
   // Conversations waiting for confirmation anywhere, from the Agent Server.
   let waiting = 0;
@@ -752,29 +802,37 @@ function watchAgentStatus(host, onRender) {
   // The open conversation's badge, plus how many runs you opened in this tab
   // are still going elsewhere: "⏳3" when the open one is running too, or
   // "✅ ⏳2" when it isn't. A lone badge is skipped when the title already
-  // starts with the same emoji.
-  function titlePrefix(base) {
+  // starts with the same emoji, and there's none without either.
+  function titlePrefix(title) {
     const emoji = badge()?.emoji;
-    const others = settings.tabStatus
-      ? [...conversations].filter(
-          ([id, entry]) => id !== openId && ACTIVE_STATUSES.has(entry.status),
-        ).length
-      : 0;
-    if (!others) return emoji && !base.startsWith(emoji) ? `${emoji} ` : '';
+    const others = [...conversations].filter(
+      ([id, entry]) => id !== openId && ACTIVE_STATUSES.has(entry.status),
+    ).length;
+    if (!others) {
+      if (!emoji) return null;
+      return title.startsWith(emoji) ? '' : `${emoji} `;
+    }
     if (emoji === STATUS_BADGES.running.emoji) return `${emoji}${others + 1} `;
     return `${emoji ? `${emoji} ` : ''}${STATUS_BADGES.running.emoji}${others} `;
   }
 
-  // Only strip the prefix we added, so a title of Canvas's own that starts
-  // with one of the badge emoji stays intact.
+  // Work from Canvas's own title, which is the current one unless it's still
+  // the one we set. Our badge replaces Canvas's status emoji, and either is
+  // dropped when the conversation's title itself starts with it.
   function renderTitle() {
     const current = document.title;
-    const base =
-      appliedPrefix && current.startsWith(appliedPrefix)
-        ? current.slice(appliedPrefix.length)
-        : current;
-    appliedPrefix = titlePrefix(base);
-    if (current !== appliedPrefix + base) setTitle(appliedPrefix + base);
+    const base = current === appliedTitle?.title ? appliedTitle.base : current;
+    let next = base;
+    if (settings.tabStatus) {
+      const canvasStatus = base.match(CANVAS_TITLE_STATUS)?.[0] ?? '';
+      const rest = base.slice(canvasStatus.length);
+      const prefix =
+        titlePrefix(rest) ??
+        (rest.startsWith(canvasStatus.trim()) ? '' : canvasStatus);
+      next = prefix + rest;
+    }
+    appliedTitle = next === base ? null : { title: next, base };
+    if (current !== next) setTitle(next);
   }
 
   // One badge for the whole installed app, which only shows outside a
@@ -991,11 +1049,11 @@ export function activate(host) {
   if (host.apiVersion !== '1') {
     throw new Error(`Extras requires host API 1, got ${host.apiVersion}.`);
   }
+  window[INSTANCE]?.();
   loadSettings();
-  // Hiding "Running" and "Reading" pulses on the open conversation's status,
-  // and re-renders whenever that changes.
+  // Hiding "Running" and "Reading" pulses on the open conversation's status.
   const quietActivity = watchQuietActivity((id) => agentStatus.statusOf(id));
-  const agentStatus = watchAgentStatus(host, () => quietActivity.refresh());
+  const agentStatus = watchAgentStatus(host, () => quietActivity.onStatus());
   // In dispose order: the agent status re-renders as it goes, so it comes
   // before what it re-renders.
   const features = [
@@ -1021,12 +1079,21 @@ export function activate(host) {
   each('refresh');
   // One body observer for all: Canvas renders the app card on Customize >
   // Apps, re-renders the chat as a run's events stream in, and may re-mount
-  // its themed root.
-  const observer = new MutationObserver(() => each('onDomChange'));
+  // its themed root. Changes to only our own elements are the features'
+  // doing, and would just run them again for nothing.
+  const observer = new MutationObserver((records) => {
+    if (!records.every(ownChange)) each('onDomChange');
+  });
   observer.observe(document.body, { childList: true, subtree: true });
-  return () => {
+  let disposed = false;
+  const dispose = () => {
+    if (disposed) return;
+    disposed = true;
+    if (window[INSTANCE] === dispose) delete window[INSTANCE];
     observer.disconnect();
     window.removeEventListener('storage', onStorage);
     each('dispose');
   };
+  window[INSTANCE] = dispose;
+  return dispose;
 }

@@ -7,10 +7,10 @@ An [OpenHands](https://www.openhands.dev/) Agent Canvas app which adds a few ext
 | Name | Description |
 | :-- | :-- |
 | **Wide Canvas** | Removes the maximum width cap from the chat window so the conversation fills the full canvas width. |
-| **Tab status** | Shows the open conversation's status in the browser tab. ⏳ ✋ ⏸️ ✅ or ❌. The tab icon gets a matching coloured dot, numbered with how many conversations need your input, as the app icon badge counts them. Runs you opened in the tab that are still going elsewhere are counted too, like `⏳3` or `✅ ⏳2`. |
+| **Tab status** | Shows the open conversation's status in the browser tab. ⏳ ✋ ⏸️ ✅ or ❌, in place of Canvas's own status emoji, which shows ✅ even while the agent waits for your confirmation. The tab icon gets a matching coloured dot, numbered with how many conversations need your input, as the app icon badge counts them. Runs you opened in the tab that are still going elsewhere are counted too, like `⏳3` or `✅ ⏳2`. |
 | **Desktop notifications** | Notifies you when the agent finishes if the tab is in the background or the window isn't focused. |
 | **App icon badge** | Shows how many conversations need your input on the icon of Canvas installed as an app (Chrome, Edge or Safari's Add to Dock): every conversation waiting for your confirmation, plus runs that ended while you were away until you open them. The ended runs are remembered across reloads and shared by all your Canvas windows in this browser. Safari only shows it once notifications are allowed. |
-| **Hide "Running" and "Reading"** | Folds each stretch of the agent's "Running" and "Reading" entries into a "Thinking" entry, like Canvas's own, which expands to show them. Its messages, edits and timed out commands stay visible, and the last "Thinking" pulses while the conversation is running. Follows Canvas's language. |
+| **Hide "Running" and "Reading"** | Folds each stretch of the agent's "Running" and "Reading" entries into a "Thinking" entry, like Canvas's own, which expands to show them. Its messages, edits and timed out commands stay visible, and the last "Thinking" pulses while the conversation is running. The activity chip above the message box says "Thinking" for them too. Follows Canvas's language. |
 | **Title bar colour** | Matches the title bar of Canvas installed as an app to Canvas's colour theme, instead of white. |
 | **Confirmation sound** | Plays a short chime when the agent needs your confirmation if the tab is in the background or the window isn't focused. |
 
