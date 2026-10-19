@@ -155,6 +155,11 @@ export function fakeHost({ statuses = {}, titles = {}, finalResponse = '' } = {}
         if (url.pathname.endsWith('/agent_final_response')) {
           return { response: finalResponse };
         }
+        // GET /api/conversations/count?status=…, over every conversation.
+        if (url.pathname.endsWith('/count')) {
+          const status = url.searchParams.get('status');
+          return Object.values(host.statuses).filter((s) => s === status).length;
+        }
         // GET /api/conversations?ids=…, as the Agent Server's batch endpoint.
         return url.searchParams.getAll('ids').map((id) => ({
           execution_status: host.statuses[id] ?? 'idle',

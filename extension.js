@@ -7,8 +7,13 @@
 // - Confirmation sound: chimes when a run needs you while you're away from it.
 // - App icon badge: counts the conversations waiting on you on the installed
 //   app's icon.
+// - Title bar colour: matches the installed app's title bar to Canvas's theme.
 
 const STORAGE_KEY = 'openhands-extras:settings';
+// Runs that ended while you were away, shared by every Canvas window and kept
+// across reloads until you open them.
+const UNSEEN_KEY = 'openhands-extras:unseen';
+const THEME_META_ID = 'openhands-extras-theme-color';
 const STYLE_ID = 'openhands-extras-wide-canvas';
 const SECTION_ID = 'openhands-extras-settings';
 const DEFAULT_SETTINGS = {
@@ -17,6 +22,7 @@ const DEFAULT_SETTINGS = {
   notifications: false,
   confirmationSound: false,
   appBadge: false,
+  themeColor: false,
 };
 
 // The chat thread is the only max-w-200 element that is also h-full, so the
@@ -28,6 +34,11 @@ const WIDE_CANVAS_CSS =
 // Status checks run at most this often, plus a slow poll while a run is going.
 const STATUS_MIN_GAP_MS = 3000;
 const STATUS_POLL_MS = 15000;
+// Otherwise, how often the count of conversations waiting for confirmation is
+// refreshed, as runs started elsewhere don't touch this page.
+const COUNT_POLL_MS = 30000;
+const WAITING_COUNT_PATH =
+  '/api/conversations/count?status=waiting_for_confirmation';
 const CONVERSATION_PATH = /\/conversations\/([0-9a-f-]{32,36})(?:\/|$)/i;
 const STATUS_BADGES = {
   running: { emoji: '⏳', color: '#3b82f6', label: 'Running' },
@@ -44,6 +55,7 @@ const STATUS_BADGES = {
 // Active badges show whenever the status holds; the rest only after this tab
 // saw the run, until you come back to the tab.
 const ACTIVE_STATUSES = new Set(['running', 'waiting_for_confirmation']);
+const ENDED_STATUSES = new Set(['finished', 'error', 'stuck']);
 const NOTIFY_STATUSES = new Set([
   'waiting_for_confirmation',
   'finished',
@@ -84,6 +96,12 @@ const SWITCHES = [
       "Show how many conversations need your input on the installed app's icon.",
     enable: appBadgeProblem,
     problem: appBadgeProblem,
+  },
+  {
+    key: 'themeColor',
+    label: 'Title bar colour',
+    description:
+      "Match the installed app's title bar to Canvas's colour theme.",
   },
 ];
 
@@ -145,6 +163,92 @@ function notificationProblem() {
 async function requestNotificationPermission() {
   await window.Notification?.requestPermission();
   return notificationProblem();
+}
+
+function loadUnseen() {
+  try {
+    const ids = JSON.parse(localStorage.getItem(UNSEEN_KEY) ?? '[]');
+    return new Set(Array.isArray(ids) ? ids : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function markUnseen(id, unseen) {
+  const ids = loadUnseen();
+  if (ids.has(id) === unseen) return;
+  if (unseen) ids.add(id);
+  else ids.delete(id);
+  if (ids.size) localStorage.setItem(UNSEEN_KEY, JSON.stringify([...ids]));
+  else localStorage.removeItem(UNSEEN_KEY);
+}
+
+// Canvas marks <body> as well as its themed root, which carries the theme.
+const themeRoot = () =>
+  document.querySelector('[data-agent-server-ui][data-color-theme]') ??
+  document.querySelector('[data-agent-server-ui]');
+
+// The first opaque background from Canvas's themed root outwards.
+function canvasBackground() {
+  const root = themeRoot();
+  for (const element of [
+    root,
+    root?.firstElementChild,
+    document.body,
+    document.documentElement,
+  ]) {
+    if (!element) continue;
+    const color = window.getComputedStyle(element).backgroundColor;
+    if (color && color !== 'transparent' && !/^rgba\(.*,\s*0\)$/.test(color)) {
+      return color;
+    }
+  }
+  return null;
+}
+
+// Installed apps colour their title bar from the theme-color meta, which
+// Canvas doesn't set. Follow its theme root's attributes, and the system
+// scheme for its "system" theme.
+function watchThemeColor() {
+  let root = null;
+  const scheme = window.matchMedia?.('(prefers-color-scheme: dark)');
+  const apply = () => {
+    let meta = document.getElementById(THEME_META_ID);
+    const color = settings.themeColor && canvasBackground();
+    if (!color) {
+      meta?.remove();
+      return;
+    }
+    if (!meta) {
+      meta = document.createElement('meta');
+      meta.id = THEME_META_ID;
+      meta.name = 'theme-color';
+      document.head.prepend(meta);
+    }
+    if (meta.content !== color) meta.content = color;
+  };
+  const observer = new MutationObserver(apply);
+  const track = () => {
+    const next = settings.themeColor ? themeRoot() : null;
+    if (next === root) return;
+    root = next;
+    observer.disconnect();
+    if (root) observer.observe(root, { attributes: true });
+    apply();
+  };
+  scheme?.addEventListener?.('change', apply);
+  return {
+    onDomChange: track,
+    refresh() {
+      track();
+      apply();
+    },
+    dispose() {
+      observer.disconnect();
+      scheme?.removeEventListener?.('change', apply);
+      document.getElementById(THEME_META_ID)?.remove();
+    },
+  };
 }
 
 function appBadgeProblem() {
@@ -301,6 +405,8 @@ function watchAgentStatus(host) {
   let openId = null;
   let appliedPrefix = '';
   let appliedBadge = null;
+  // Conversations waiting for confirmation anywhere, from the Agent Server.
+  let waiting = 0;
   let lastCheck = 0;
   let trailing = 0;
   let poll = 0;
@@ -314,7 +420,7 @@ function watchAgentStatus(host) {
   const originalHrefs = new WeakMap();
   const badgedHrefs = new Set();
   let iconHref = null;
-  let iconColor = null;
+  let iconKey = null;
   let iconSource;
   const iconLinks = () => document.head.querySelectorAll('link[rel~="icon"]');
   const originalIconUrl = () => {
@@ -330,6 +436,10 @@ function watchAgentStatus(host) {
     settings.notifications ||
     settings.confirmationSound ||
     settings.appBadge;
+  // The count of conversations that need your input feeds the app icon badge
+  // and the tab icon.
+  const counting = () => settings.tabStatus || settings.appBadge;
+  const needsYou = () => (counting() ? waiting + loadUnseen().size : 0);
 
   function badge() {
     const open = settings.tabStatus && conversations.get(openId);
@@ -377,34 +487,41 @@ function watchAgentStatus(host) {
     }
   }
 
+  // The dot takes the open conversation's colour, and holds the number of
+  // conversations that need your input when there are any.
   async function renderIcon() {
-    const color = badge()?.color ?? null;
-    if (color === iconColor) return;
-    iconColor = color;
-    if (!color) {
+    const count = settings.tabStatus ? needsYou() : 0;
+    const color =
+      badge()?.color ??
+      (count ? STATUS_BADGES.waiting_for_confirmation.color : null);
+    const key = color && `${color}|${count}`;
+    if (key === iconKey) return;
+    iconKey = key;
+    if (!key) {
       iconHref = null;
       applyIcon();
       return;
     }
     iconSource ??= loadDataUrl(originalIconUrl());
     const source = await iconSource;
-    if (iconColor !== color) return;
+    if (iconKey !== key) return;
     const image = source
       ? `<image href="${source}" width="32" height="32"/>`
       : '';
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">${image}<circle cx="24" cy="24" r="7" fill="${color}" stroke="#fff" stroke-width="2"/></svg>`;
+    const dot = count
+      ? `<circle cx="22" cy="22" r="10" fill="${color}" stroke="#fff" stroke-width="2"/><text x="22" y="22" fill="#fff" font-family="sans-serif" font-size="${count > 9 ? 11 : 14}" font-weight="700" text-anchor="middle" dominant-baseline="central">${count > 9 ? '9+' : count}</text>`
+      : `<circle cx="24" cy="24" r="7" fill="${color}" stroke="#fff" stroke-width="2"/>`;
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">${image}${dot}</svg>`;
     iconHref = `data:image/svg+xml,${encodeURIComponent(svg)}`;
     badgedHrefs.add(iconHref);
     applyIcon();
   }
 
   // One badge for the whole installed app, which only shows outside a
-  // browser tab; it counts the runs that ended or need you while you were
-  // away, until you look at them.
+  // browser tab: the conversations waiting for confirmation, plus the runs
+  // that ended while you were away until you open them.
   function renderBadge() {
-    const count = settings.appBadge
-      ? [...conversations.values()].filter((entry) => entry.needsYou).length
-      : 0;
+    const count = settings.appBadge ? needsYou() : 0;
     if (count === appliedBadge) return;
     appliedBadge = count;
     const { navigator } = window;
@@ -451,14 +568,14 @@ function watchAgentStatus(host) {
     entry.status = next;
     entry.title = info.title || entry.title;
     if (ACTIVE_STATUSES.has(next)) entry.sawActive = true;
-    if (next === 'running') entry.needsYou = false;
+    if (!ENDED_STATUSES.has(next)) markUnseen(id, false);
     const changedWhileAway =
       previous &&
       previous !== next &&
       entry.sawActive &&
       (id !== openId || away());
     if (!changedWhileAway) return;
-    if (NOTIFY_STATUSES.has(next)) entry.needsYou = true;
+    if (counting() && ENDED_STATUSES.has(next)) markUnseen(id, true);
     if (settings.notifications && NOTIFY_STATUSES.has(next)) {
       notify(id, entry.title, next);
     }
@@ -479,35 +596,45 @@ function watchAgentStatus(host) {
     if (nextOpenId !== openId) {
       openId = nextOpenId;
       if (openId && !conversations.has(openId)) {
-        conversations.set(openId, {
-          status: null,
-          title: '',
-          sawActive: false,
-          needsYou: false,
-        });
+        conversations.set(openId, { status: null, title: '', sawActive: false });
       }
-      const open = conversations.get(openId);
-      if (open && !away()) open.needsYou = false;
       render();
     }
+    if (openId && !away()) markUnseen(openId, false);
     for (const [id, entry] of conversations) {
-      const followRun =
-        watching() &&
-        (ACTIVE_STATUSES.has(entry.status) ||
-          (settings.appBadge && entry.needsYou));
+      const followRun = watching() && ACTIVE_STATUSES.has(entry.status);
       if (id !== openId && !followRun) conversations.delete(id);
     }
-    const ids = [...conversations.keys()];
-    if (ids.length) {
+    // Unseen runs are checked too, to drop ones resumed or deleted elsewhere.
+    const unseen = counting()
+      ? [...loadUnseen()].filter((id) => !conversations.has(id))
+      : [];
+    const ids = [...conversations.keys(), ...unseen];
+    if (ids.length || counting()) {
       inFlight = true;
       try {
         // One request for every conversation followed; missing ones are null.
         const query = ids.map((id) => `ids=${id}`).join('&');
-        const infos = await host.agentServer.request({
-          path: `/api/conversations?${query}`,
-        });
+        const [infos, count] = await Promise.all([
+          ids.length
+            ? host.agentServer.request({ path: `/api/conversations?${query}` })
+            : [],
+          counting()
+            ? host.agentServer
+                .request({ path: WAITING_COUNT_PATH })
+                .catch(() => waiting)
+            : 0,
+        ]);
         if (!disposed) {
-          ids.forEach((id, index) => infos[index] && update(id, infos[index]));
+          waiting = Number(count) || 0;
+          ids.forEach((id, index) => {
+            const info = infos[index];
+            if (conversations.has(id)) {
+              if (info) update(id, info);
+            } else if (!ENDED_STATUSES.has(info?.execution_status)) {
+              markUnseen(id, false);
+            }
+          });
         }
       } catch {
         // Keep the last known statuses; the next check retries.
@@ -524,15 +651,17 @@ function watchAgentStatus(host) {
     }
   }
 
-  // Poll only while a run is going: runs you navigated away from don't
+  // Poll quickly while a run is going: runs you navigated away from don't
   // re-render this page, and a run's last event can land between checks.
-  // Otherwise, page changes and coming back to the tab trigger checks.
+  // Poll slowly while counting, for runs started elsewhere. Otherwise, page
+  // changes and coming back to the tab trigger checks.
   function schedulePoll() {
     clearTimeout(poll);
     const running = [...conversations.values()].some((entry) =>
       ACTIVE_STATUSES.has(entry.status),
     );
-    poll = running ? setTimeout(requestCheck, STATUS_POLL_MS) : 0;
+    const wait = running ? STATUS_POLL_MS : counting() ? COUNT_POLL_MS : 0;
+    poll = wait ? setTimeout(requestCheck, wait) : 0;
   }
 
   function requestCheck() {
@@ -552,7 +681,7 @@ function watchAgentStatus(host) {
     if (away() || !watching()) return;
     const open = conversations.get(openId);
     if (open && !ACTIVE_STATUSES.has(open.status)) open.sawActive = false;
-    if (open) open.needsYou = false;
+    if (openId) markUnseen(openId, false);
     render();
     requestCheck();
   }
@@ -570,8 +699,17 @@ function watchAgentStatus(host) {
     attributes: true,
     attributeFilter: ['href'],
   });
+  // Another window marked or cleared a run: the open one can't be unseen
+  // while you're looking at it.
+  function onUnseen(event) {
+    if (event.key !== UNSEEN_KEY) return;
+    if (openId && !away()) markUnseen(openId, false);
+    render();
+  }
+
   document.addEventListener('visibilitychange', onReturn);
   window.addEventListener('focus', onReturn);
+  window.addEventListener('storage', onUnseen);
 
   return {
     onDomChange() {
@@ -579,6 +717,7 @@ function watchAgentStatus(host) {
     },
     // Also runs the first check, as activate() applies the initial settings.
     refresh() {
+      if (!counting()) localStorage.removeItem(UNSEEN_KEY);
       render();
       lastCheck = 0;
       requestCheck();
@@ -590,6 +729,7 @@ function watchAgentStatus(host) {
       clearTimeout(poll);
       document.removeEventListener('visibilitychange', onReturn);
       window.removeEventListener('focus', onReturn);
+      window.removeEventListener('storage', onUnseen);
       openId = null;
       conversations.clear();
       render();
@@ -603,9 +743,11 @@ export function activate(host) {
   }
   loadSettings();
   const agentStatus = watchAgentStatus(host);
+  const themeColor = watchThemeColor();
   const applyAll = () => {
     applyWideCanvas(settings.wideCanvas);
     agentStatus.refresh();
+    themeColor.refresh();
   };
   // Settings changed in another tab: apply them and rebuild the card section.
   const onStorage = (event) => {
@@ -620,11 +762,13 @@ export function activate(host) {
     saveSettings(next);
     applyAll();
   });
-  // One body observer for both: Canvas renders the app card on Customize >
-  // Apps, and re-renders the chat as a run's events stream in.
+  // One body observer for all: Canvas renders the app card on Customize >
+  // Apps, re-renders the chat as a run's events stream in, and may re-mount
+  // its themed root.
   const observer = new MutationObserver(() => {
     card.onDomChange();
     agentStatus.onDomChange();
+    themeColor.onDomChange();
   });
   observer.observe(document.body, { childList: true, subtree: true });
   return () => {
@@ -632,6 +776,7 @@ export function activate(host) {
     window.removeEventListener('storage', onStorage);
     card.dispose();
     agentStatus.dispose();
+    themeColor.dispose();
     applyWideCanvas(false);
   };
 }

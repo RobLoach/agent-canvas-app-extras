@@ -21,6 +21,15 @@ function iconColor(page) {
     : decodeURIComponent(href).match(/fill="(#[0-9a-f]+)"/)[1];
 }
 
+// The badged icon is drawn once Canvas's own icon has loaded, so wait up to a
+// second for it before checking.
+async function drawnIcon(page, expected) {
+  for (let tries = 0; iconColor(page) !== expected && tries < 50; tries++) {
+    await settle();
+  }
+  return iconColor(page);
+}
+
 test('does nothing while switched off', async (t) => {
   const page = openConversation(t, {});
   const host = fakeHost({ statuses: { [ID]: 'running' } });
@@ -41,7 +50,7 @@ test('badges a running conversation without replacing Canvas\'s title node', asy
 
   assert.equal(page.document.title, '⏳ My chat');
   assert.equal(page.document.querySelector('title').firstChild, titleNode);
-  assert.equal(iconColor(page), '#3b82f6');
+  assert.equal(await drawnIcon(page, '#3b82f6'), '#3b82f6');
   assert.deepEqual(page.fetched, ['https://canvas.test/favicon.svg']);
   assert.match(
     decodeURIComponent(page.document.querySelector('link').getAttribute('href')),
@@ -65,7 +74,7 @@ test('shows a finished badge until you come back to the tab', async (t) => {
   page.checkNow();
   await settle();
   assert.equal(page.document.title, '✅ My chat');
-  assert.equal(iconColor(page), '#22c55e');
+  assert.equal(await drawnIcon(page, '#22c55e'), '#22c55e');
 
   page.returnToTab();
   await settle();
@@ -108,7 +117,7 @@ test('does not repeat a badge emoji the title already starts with', async (t) =>
   page.checkNow();
   await settle();
   assert.equal(page.document.title, '✅🔧 Miscellaneous Request');
-  assert.equal(iconColor(page), '#22c55e');
+  assert.equal(await drawnIcon(page, '#22c55e'), '#22c55e');
 });
 
 test('re-badges the icon when React resets its href', async (t) => {
@@ -118,7 +127,7 @@ test('re-badges the icon when React resets its href', async (t) => {
 
   page.document.querySelector('link').setAttribute('href', '/favicon.svg');
   await settle();
-  assert.equal(iconColor(page), '#3b82f6');
+  assert.equal(await drawnIcon(page, '#3b82f6'), '#3b82f6');
 });
 
 test('restores the title and icon and stops checking when disabled', async (t) => {
@@ -138,7 +147,7 @@ test('restores the title and icon and stops checking when disabled', async (t) =
   assert.equal(host.requests.length, requests);
 });
 
-test('does not check outside conversation pages', async (t) => {
+test('only counts waiting conversations outside conversation pages', async (t) => {
   const page = setupPage(t, { url: 'https://canvas.test/apps', head: HEAD });
   page.settings({ tabStatus: true, notifications: true });
   const host = fakeHost();
@@ -146,7 +155,25 @@ test('does not check outside conversation pages', async (t) => {
   page.mutate();
   await settle();
 
-  assert.deepEqual(host.requests, []);
+  assert.deepEqual(host.requests, [
+    '/api/conversations/count?status=waiting_for_confirmation',
+  ]);
+});
+
+test('numbers the tab icon dot with the conversations that need you', async (t) => {
+  const OTHER = 'fedcba9876543210fedcba9876543210';
+  const page = openConversation(t);
+  const host = fakeHost({ statuses: { [ID]: 'idle', [OTHER]: 'waiting_for_confirmation' } });
+  await activateExtension(page, host);
+
+  assert.equal(await drawnIcon(page, '#f59e0b'), '#f59e0b');
+  const href = decodeURIComponent(page.document.querySelector('link').getAttribute('href'));
+  assert.match(href, />1<\/text>/);
+
+  host.statuses[OTHER] = 'running';
+  page.checkNow();
+  await settle();
+  assert.equal(iconColor(page), 'canvas');
 });
 
 test('counts runs still going in conversations you navigated away from', async (t) => {

@@ -153,7 +153,10 @@ test('badges the app icon with the runs that need you until you open them', asyn
 test('badges a run that ends while you are away, and clears when you return', async (t) => {
   const { page, host } = await watchRun(t, { appBadge: true });
   await finish(page, host, A, 'waiting_for_confirmation');
-  assert.equal(page.badge, 0, 'not while you are watching it');
+  assert.equal(page.badge, 1, 'waiting for confirmation counts anywhere');
+
+  await finish(page, host, A, 'finished');
+  assert.equal(page.badge, 0, 'not when it ends while you watch');
 
   await finish(page, host, A, 'running');
   page.hidden = true;
@@ -173,5 +176,51 @@ test('clears the app icon badge when switched off', async (t) => {
   page.settings({});
   page.checkNow();
   await settle();
+  assert.equal(page.badge, 0);
+});
+
+test('counts conversations waiting for confirmation that this tab never saw', async (t) => {
+  const { page, host } = await watchRun(t, { appBadge: true });
+  await finish(page, host, B, 'waiting_for_confirmation');
+  assert.equal(page.badge, 1);
+});
+
+test('remembers unseen runs across reloads and shares them between windows', async (t) => {
+  const { page, host } = await watchRun(t, { appBadge: true });
+  page.hidden = true;
+  await finish(page, host);
+  assert.deepEqual(
+    JSON.parse(page.window.localStorage.getItem('openhands-extras:unseen')),
+    [A],
+  );
+
+  // A fresh load of the app, as after a reload, starts from the stored runs.
+  page.dispose();
+  page.badge = undefined;
+  await activateExtension(page, host);
+  await settle();
+  assert.equal(page.badge, 1);
+
+  // Another window opened the run.
+  page.window.localStorage.removeItem('openhands-extras:unseen');
+  page.window.dispatchEvent(
+    new page.window.StorageEvent('storage', { key: 'openhands-extras:unseen' }),
+  );
+  assert.equal(page.badge, 0);
+});
+
+test('drops unseen runs that were resumed or deleted elsewhere', async (t) => {
+  const page = setupPage(t, { url: 'https://canvas.test/apps' });
+  page.settings({ appBadge: true });
+  page.window.localStorage.setItem('openhands-extras:unseen', JSON.stringify([A, B]));
+  const host = fakeHost({ statuses: { [A]: 'running' } });
+  host.agentServer.request = async ({ path }) =>
+    path.startsWith('/api/conversations?')
+      ? [{ execution_status: 'running' }, null]
+      : 0;
+  await activateExtension(page, host);
+  await settle();
+
+  assert.equal(page.window.localStorage.getItem('openhands-extras:unseen'), null);
   assert.equal(page.badge, 0);
 });
