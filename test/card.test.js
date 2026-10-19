@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { setupPage, fakeHost, activateExtension, settle } from './helpers.js';
+import { activateExtension, fakeHost, flush, setupPage } from './helpers.js';
 
 const CARDS = `
   <article data-testid="canvas-extension-card-demo-page"><header></header><footer></footer></article>
@@ -43,7 +43,7 @@ test('stays out of the card on other pages', async (t) => {
   const page = setupPage(t, { url: 'https://canvas.test/conversations/x', body: CARDS });
   await activateExtension(page, fakeHost());
   page.mutate();
-  await settle();
+  await flush();
 
   assert.equal(section(page), null);
 });
@@ -54,7 +54,7 @@ test('moves back above the footer when Canvas inserts before it', async (t) => {
 
   const footer = page.document.querySelector('#card > footer');
   footer.before(page.document.createElement('section'));
-  await settle();
+  await flush();
 
   assert.equal(footer.previousElementSibling, section(page));
   assert.equal(page.document.querySelectorAll('#openhands-extras-settings').length, 1);
@@ -65,7 +65,7 @@ test('saves and applies a switch', async (t) => {
   await activateExtension(page, fakeHost());
 
   switchFor(page, 'wideCanvas').click();
-  await settle();
+  await flush();
 
   assert.equal(stored(page).wideCanvas, true);
   assert.ok(page.document.getElementById('openhands-extras-wide-canvas'));
@@ -78,7 +78,7 @@ test('turns notifications back off when the browser denies permission', async (t
   await activateExtension(page, fakeHost());
 
   switchFor(page, 'notifications').click();
-  await settle();
+  await flush();
 
   assert.equal(switchFor(page, 'notifications').checked, false);
   assert.match(hintFor(page, 'notifications'), /blocked/);
@@ -86,9 +86,8 @@ test('turns notifications back off when the browser denies permission', async (t
 });
 
 test('explains when notifications are on but permission was revoked', async (t) => {
-  const page = setupPage(t, { body: CARDS });
+  const page = setupPage(t, { body: CARDS, settings: { notifications: true } });
   page.permission = 'denied';
-  page.settings({ notifications: true });
   await activateExtension(page, fakeHost());
 
   assert.equal(switchFor(page, 'notifications').checked, true);

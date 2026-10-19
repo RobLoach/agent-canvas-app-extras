@@ -1,31 +1,44 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { setupPage, fakeHost, activateExtension, settle } from './helpers.js';
+import {
+  A,
+  B,
+  activateExtension,
+  fakeHost,
+  flush,
+  setupPage,
+  start,
+} from './helpers.js';
 
-const A = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
-const B = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+const UNSEEN = 'openhands-extras:unseen';
+const unseen = (page) => page.window.localStorage.getItem(UNSEEN);
 
 // Open conversation A with a run going, as seen by the extension.
-async function watchRun(t, settings = { notifications: true }) {
-  const page = setupPage(t, {
-    url: `https://canvas.test/conversations/${A}`,
+const watchRun = (t, settings = { notifications: true }) =>
+  start(t, {
+    path: `/conversations/${A}`,
     head: '<title>Release</title>',
-  });
-  page.settings(settings);
-  const host = fakeHost({
+    settings,
     statuses: { [A]: 'running', [B]: 'idle' },
     titles: { [A]: 'Release', [B]: 'Other' },
     finalResponse: 'All tests pass.',
   });
-  await activateExtension(page, host);
-  await settle();
-  return { page, host };
-}
 
 async function finish(page, host, id = A, status = 'finished') {
   host.statuses[id] = status;
-  page.checkNow();
-  await settle();
+  await page.check();
+}
+
+// The app on Customize > Apps with unseen runs stored, and a host that
+// answers status requests with respond(path).
+async function withUnseen(t, ids, respond) {
+  const page = setupPage(t, { settings: { appBadge: true } });
+  page.window.localStorage.setItem(UNSEEN, JSON.stringify(ids));
+  const host = fakeHost();
+  host.agentServer.request = async ({ path }) =>
+    path.startsWith('/api/conversations?') ? respond() : 0;
+  await activateExtension(page, host);
+  return page;
 }
 
 test('notifies with the final reply when a run finishes in a background tab', async (t) => {
@@ -69,8 +82,7 @@ test('stays quiet when notifications are off', async (t) => {
 test('follows a run after you open another conversation, then opens it on click', async (t) => {
   const { page, host } = await watchRun(t);
   page.navigate(`/conversations/${B}`);
-  page.checkNow();
-  await settle();
+  await page.check();
   assert.equal(host.requests.at(-1), `/api/conversations?ids=${A}&ids=${B}`);
 
   await finish(page, host, A, 'error');
@@ -82,8 +94,7 @@ test('follows a run after you open another conversation, then opens it on click'
   assert.ok(page.notifications[0].closed);
 
   host.requests.length = 0;
-  page.checkNow();
-  await settle();
+  await page.check();
   assert.deepEqual(host.requests, [`/api/conversations?ids=${B}`]);
 });
 
@@ -104,8 +115,7 @@ test('strips Markdown from the final reply and cuts it on a word', async (t) => 
     path.endsWith('/agent_final_response')
       ? { response: `## Done\n\n- Fixed **the** \`bug\` in [extension.js](https://x.test)\n\n\`\`\`js\ncode();\n\`\`\`\n${words}` }
       : [{ execution_status: 'finished', title: 'Release' }];
-  page.checkNow();
-  await settle();
+  await page.check();
 
   const body = page.notifications[0].options.body;
   assert.ok(body.startsWith('Done Fixed the bug in extension.js word word'), body);
@@ -136,8 +146,7 @@ test('badges the app icon with the runs that need you until you open them', asyn
   assert.equal(page.badge, 0);
 
   page.navigate(`/conversations/${B}`);
-  page.checkNow();
-  await settle();
+  await page.check();
   await finish(page, host, A, 'waiting_for_confirmation');
   assert.equal(page.badge, 1);
 
@@ -145,8 +154,7 @@ test('badges the app icon with the runs that need you until you open them', asyn
   assert.equal(page.badge, 1);
 
   page.navigate(`/conversations/${A}`);
-  page.checkNow();
-  await settle();
+  await page.check();
   assert.equal(page.badge, 0);
 });
 
@@ -173,9 +181,7 @@ test('clears the app icon badge when switched off', async (t) => {
   await finish(page, host);
   assert.equal(page.badge, 1);
 
-  page.settings({});
-  page.checkNow();
-  await settle();
+  await page.changeSettings({});
   assert.equal(page.badge, 0);
 });
 
@@ -189,62 +195,39 @@ test('remembers unseen runs across reloads and shares them between windows', asy
   const { page, host } = await watchRun(t, { appBadge: true });
   page.hidden = true;
   await finish(page, host);
-  assert.deepEqual(
-    JSON.parse(page.window.localStorage.getItem('openhands-extras:unseen')),
-    [A],
-  );
+  assert.equal(unseen(page), JSON.stringify([A]));
 
   // A fresh load of the app, as after a reload, starts from the stored runs.
   page.dispose();
   page.badge = undefined;
   await activateExtension(page, host);
-  await settle();
   assert.equal(page.badge, 1);
 
   // Another window opened the run.
-  page.window.localStorage.removeItem('openhands-extras:unseen');
-  page.window.dispatchEvent(
-    new page.window.StorageEvent('storage', { key: 'openhands-extras:unseen' }),
-  );
+  page.window.localStorage.removeItem(UNSEEN);
+  page.window.dispatchEvent(new page.window.StorageEvent('storage', { key: UNSEEN }));
   assert.equal(page.badge, 0);
 });
 
 test('drops unseen runs that were resumed or deleted elsewhere', async (t) => {
-  const page = setupPage(t, { url: 'https://canvas.test/apps' });
-  page.settings({ appBadge: true });
-  page.window.localStorage.setItem('openhands-extras:unseen', JSON.stringify([A, B]));
-  const host = fakeHost({ statuses: { [A]: 'running' } });
-  host.agentServer.request = async ({ path }) =>
-    path.startsWith('/api/conversations?')
-      ? [{ execution_status: 'running' }, null]
-      : 0;
-  await activateExtension(page, host);
-  await settle();
+  const page = await withUnseen(t, [A, B], () => [{ execution_status: 'running' }, null]);
 
-  assert.equal(page.window.localStorage.getItem('openhands-extras:unseen'), null);
+  assert.equal(unseen(page), null);
   assert.equal(page.badge, 0);
 });
 
 test('keeps the unseen runs when the server answers unexpectedly', async (t) => {
-  const page = setupPage(t, { url: 'https://canvas.test/apps' });
-  page.settings({ appBadge: true });
-  page.window.localStorage.setItem('openhands-extras:unseen', JSON.stringify([A]));
-  const host = fakeHost();
   let answer = { detail: 'Bad gateway' };
-  host.agentServer.request = async ({ path }) => {
-    if (!path.startsWith('/api/conversations?')) return 0;
+  const page = await withUnseen(t, [A], () => {
     if (answer instanceof Error) throw answer;
     return answer;
-  };
-  await activateExtension(page, host);
-  await settle();
-  assert.equal(page.window.localStorage.getItem('openhands-extras:unseen'), JSON.stringify([A]));
+  });
+  assert.equal(unseen(page), JSON.stringify([A]));
   assert.equal(page.badge, 1);
 
   answer = new Error('Offline');
-  page.checkNow();
-  await settle();
-  assert.equal(page.window.localStorage.getItem('openhands-extras:unseen'), JSON.stringify([A]));
+  await page.check();
+  assert.equal(unseen(page), JSON.stringify([A]));
 });
 
 test('a notification the browser refuses is not an unhandled error', async (t) => {
@@ -264,7 +247,7 @@ test('a notification the browser refuses is not an unhandled error', async (t) =
   globalThis.Notification = Refusing;
   page.hidden = true;
   await finish(page, host);
-  await settle();
+  await flush();
   assert.deepEqual(unhandled, []);
 });
 

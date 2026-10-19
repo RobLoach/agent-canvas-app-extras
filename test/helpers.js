@@ -1,15 +1,33 @@
 import { JSDOM } from 'jsdom';
 
+// Conversations, and the request for how many wait for confirmation.
+export const A = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+export const B = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+export const COUNT_PATH =
+  '/api/conversations/count?status=waiting_for_confirmation';
+// The app checks statuses at most this often, as its STATUS_MIN_GAP_MS.
+const CHECK_GAP_MS = 3000;
+
 let loads = 0;
 
+// Lets pending promises, observer callbacks and jsdom's own events run,
+// without moving the mocked clock.
+export async function flush() {
+  for (let turn = 0; turn < 5; turn++) {
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+}
+
 // A Canvas-like page in jsdom, installed as the globals extension.js uses,
-// with controls for the browser state jsdom can't produce on its own. It's
-// torn down after the test `t`: the app is disabled before the window closes,
-// as closing it empties the page under the app's observers.
+// with controls for the browser state jsdom can't produce on its own, and a
+// mocked clock. It's torn down after the test `t`: the app is disabled before
+// the window closes, as closing it empties the page under the app's
+// observers.
 export function setupPage(
   t,
-  { url = 'https://canvas.test/apps', head = '', body = '' } = {},
+  { url = 'https://canvas.test/apps', head = '', body = '', settings } = {},
 ) {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: Date.now() });
   const dom = new JSDOM(
     `<!doctype html><html><head>${head}</head><body>${body}</body></html>`,
     { url },
@@ -113,6 +131,14 @@ export function setupPage(
         JSON.stringify(values),
       );
     },
+    // Settings changed in another tab, which applies them here too.
+    async changeSettings(values) {
+      page.settings(values);
+      window.dispatchEvent(
+        new window.StorageEvent('storage', { key: 'openhands-extras:settings' }),
+      );
+      await flush();
+    },
     navigate(path) {
       window.history.pushState({}, '', path);
     },
@@ -120,12 +146,17 @@ export function setupPage(
     mutate() {
       window.document.body.append(window.document.createElement('div'));
     },
-    // Re-check the agent status now instead of waiting out the 3 second gap
-    // between checks: a settings change from another tab triggers one.
-    checkNow() {
-      window.dispatchEvent(
-        new window.StorageEvent('storage', { key: 'openhands-extras:settings' }),
-      );
+    // Time passes.
+    async wait(ms) {
+      t.mock.timers.tick(ms);
+      await flush();
+    },
+    // Canvas updates the page after the gap between status checks, so the
+    // app checks again.
+    async check() {
+      t.mock.timers.tick(CHECK_GAP_MS);
+      page.mutate();
+      await flush();
     },
     returnToTab() {
       page.hidden = false;
@@ -135,6 +166,7 @@ export function setupPage(
     },
     dispose: () => {},
   });
+  if (settings) page.settings(settings);
   t.after(() => {
     page.dispose();
     window.close();
@@ -176,8 +208,9 @@ export function fakeHost({ statuses = {}, titles = {}, finalResponse = '' } = {}
   return host;
 }
 
-// A fresh copy of extension.js per test, since it keeps module-level state.
-// Returns the app's disposer, which is safe to call before the teardown.
+// A fresh copy of extension.js per test, as Canvas imports one per
+// activation, so the translations it caches don't carry over. Returns the
+// app's disposer, which is safe to call before the teardown.
 export async function activateExtension(page, host) {
   loads += 1;
   const { activate } = await import(`../extension.js?load=${loads}`);
@@ -187,8 +220,19 @@ export async function activateExtension(page, host) {
     if (!disposed) dispose();
     disposed = true;
   };
+  await flush();
   return page.dispose;
 }
 
-export const settle = (ms = 20) =>
-  new Promise((resolve) => setTimeout(resolve, ms));
+// The app running on a Canvas page at `path`, with a host backed by fake
+// conversations. before(page) sets the page up first, e.g. its storage.
+export async function start(
+  t,
+  { path = '/apps', statuses, titles, finalResponse, before, ...pageOptions } = {},
+) {
+  const page = setupPage(t, { url: `https://canvas.test${path}`, ...pageOptions });
+  const host = fakeHost({ statuses, titles, finalResponse });
+  before?.(page);
+  await activateExtension(page, host);
+  return { page, host };
+}

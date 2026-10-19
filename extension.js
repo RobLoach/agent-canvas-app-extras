@@ -962,6 +962,8 @@ function watchAgentStatus(host, onRender) {
   let waiting = 0;
   let poll = 0;
   let disposed = false;
+  // The settings that need statuses, as last applied.
+  let statusSettings;
 
   // A browser window behind another app often still counts as visible.
   const away = () => document.hidden || !document.hasFocus();
@@ -1154,10 +1156,16 @@ function watchAgentStatus(host, onRender) {
       if (openId && !away()) unseenRuns.mark(openId, false);
       render();
     },
-    // Also runs the first check, as activate() applies the initial settings.
+    // Check at once when a setting that needs statuses changes, which
+    // includes activate() applying the first ones.
     refresh() {
       if (!counting()) unseenRuns.clear();
       render();
+      const next = SWITCHES.filter((item) => item.status)
+        .map((item) => settings[item.key])
+        .join();
+      if (next === statusSettings) return;
+      statusSettings = next;
       checks.now();
     },
     dispose() {

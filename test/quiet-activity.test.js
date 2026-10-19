@@ -1,8 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { setupPage, fakeHost, activateExtension, settle } from './helpers.js';
-
-const ID = '0123456789abcdef0123456789abcdef';
+import { A, activateExtension, fakeHost, flush, setupPage } from './helpers.js';
 
 // Chat items as Canvas renders them: an event row in its own item, or after
 // the agent's message in the same item.
@@ -13,14 +11,13 @@ const message = (text) => `<div class="agent-message">${text}</div>`;
 const TIMEOUT =
   '<span class="flex-shrink-0"><svg data-testid="status-icon"></svg></span>';
 
-function openChat(t, items, settings = { quietActivity: true }) {
-  const page = setupPage(t, {
-    url: `https://canvas.test/conversations/${ID}`,
+// Conversation A's chat, before the app starts.
+const openChat = (t, items, settings = { quietActivity: true }) =>
+  setupPage(t, {
+    url: `https://canvas.test/conversations/${A}`,
     body: `<div data-testid="chat-scroll-container">${items.join('')}</div>`,
+    settings,
   });
-  page.settings(settings);
-  return page;
-}
 
 const chat = (page) => page.document.querySelector('[data-testid="chat-scroll-container"]');
 const toggles = (page) => [...page.document.querySelectorAll('[data-extras-thinking]')];
@@ -95,7 +92,7 @@ test('expands a Thinking entry to show what it folded, and collapses it again', 
 
   // It stays open as Canvas re-renders.
   page.mutate();
-  await settle();
+  await flush();
   assert.deepEqual(shown(page), ['Running ls', 'Reading a.js', 'Thinking', 'Done.']);
 
   button.click();
@@ -104,31 +101,29 @@ test('expands a Thinking entry to show what it folded, and collapses it again', 
 
 test('pulses the last Thinking while the open conversation is running', async (t) => {
   const page = openChat(t, [item(message('On it.')), item(row('Running <strong>ls</strong>'))]);
-  const host = fakeHost({ statuses: { [ID]: 'running' } });
+  const host = fakeHost({ statuses: { [A]: 'running' } });
   await activateExtension(page, host);
-  await settle();
   assert.deepEqual(shown(page), ['On it.', 'Thinking']);
   assert.deepEqual(pulsing(page), [true]);
 
   // The next event joins the same stretch, whose toggle moves into it.
   chat(page).insertAdjacentHTML('beforeend', item(row('Reading <code>a.js</code>')));
-  await settle();
+  await flush();
   assert.equal(chat(page).lastElementChild.lastElementChild, toggles(page)[0]);
   assert.equal(toggles(page).length, 1);
 
   // A message from the agent ends the stretch, which stays as history.
   chat(page).insertAdjacentHTML('beforeend', item(message('Found it.')));
-  await settle();
+  await flush();
   assert.deepEqual(shown(page), ['On it.', 'Thinking', 'Found it.']);
   assert.deepEqual(pulsing(page), [false]);
 
   // As does the run ending.
   chat(page).insertAdjacentHTML('beforeend', item(row('Running <strong>git status</strong>')));
-  await settle();
+  await flush();
   assert.deepEqual(pulsing(page), [false, true]);
-  host.statuses[ID] = 'finished';
-  page.checkNow();
-  await settle();
+  host.statuses[A] = 'finished';
+  await page.check();
   assert.deepEqual(pulsing(page), [false, false]);
 });
 
@@ -150,7 +145,7 @@ test("uses Canvas's translations for the page's language", async (t) => {
     };
   };
   await activateExtension(page, fakeHost());
-  await settle();
+  await flush();
 
   assert.deepEqual(fetched, ['/locales/de/openhands.json']);
   // English stays the fallback for titles German doesn't translate.
@@ -162,13 +157,11 @@ test('leaves the chat alone while off, and restores it when disabled', async (t)
   await activateExtension(page, fakeHost());
   assert.deepEqual(shown(page), ['Running ls']);
 
-  page.settings({ quietActivity: true });
-  page.checkNow();
+  await page.changeSettings({ quietActivity: true });
   toggles(page)[0].querySelector('button').click();
   assert.deepEqual(shown(page), ['Running ls', 'Thinking']);
 
-  page.settings({});
-  page.checkNow();
+  await page.changeSettings({});
   assert.deepEqual(shown(page), ['Running ls']);
   assert.equal(page.document.querySelector('[data-extras-quiet], [data-extras-shown]'), null);
   assert.equal(page.document.getElementById('openhands-extras-quiet-activity'), null);
@@ -184,7 +177,7 @@ test('a second copy of the app stops the first, rather than fighting it', async 
   const { activate } = await import(`../extension.js?second=${Date.now()}`);
   const second = activate(fakeHost());
   page.mutate();
-  await settle();
+  await flush();
 
   assert.equal(toggles(page).length, 1);
   assert.deepEqual(shown(page), ['Thinking', 'Done.']);
@@ -214,15 +207,14 @@ test('says Thinking on the activity chip while it shows a folded title', async (
 
   // React updates its own label, which shows again for anything else.
   canvasLabel.innerHTML = 'Editing <code>a.js</code>';
-  await settle();
+  await flush();
   assert.equal(visible(), '|Editing a.js');
 
   canvasLabel.innerHTML = 'Reading <code>b.js</code>';
-  await settle();
+  await flush();
   assert.equal(visible(), '|Thinking');
 
-  page.settings({});
-  page.checkNow();
+  await page.changeSettings({});
   assert.equal(visible(), '|Reading b.js');
 });
 
@@ -241,7 +233,7 @@ test('a translation that arrives after disabling changes nothing', async (t) => 
   const dispose = await activateExtension(page, fakeHost());
   dispose();
   release();
-  await settle();
+  await flush();
 
   assert.equal(toggles(page).length, 0);
   assert.equal(page.document.querySelector('[data-extras-quiet]'), null);
@@ -264,8 +256,7 @@ test("leaves rows alone when Canvas's markup doesn't have their wrapper", async 
 
 test('the Thinking toggle has a focus ring and a pulse that respects reduced motion', async (t) => {
   const page = openChat(t, [item(row('Running <strong>ls</strong>'))]);
-  await activateExtension(page, fakeHost({ statuses: { [ID]: 'running' } }));
-  await settle();
+  await activateExtension(page, fakeHost({ statuses: { [A]: 'running' } }));
   const [thinking] = toggles(page);
   const button = thinking.querySelector('button');
   for (const name of ['focus-visible:outline-2', 'focus-visible:outline-offset-2', 'focus-visible:outline-focus']) {
