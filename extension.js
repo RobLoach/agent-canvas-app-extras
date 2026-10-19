@@ -12,15 +12,15 @@
 //   rows that expand to show them, and says "Thinking" on the activity chip.
 //
 // Each feature is an object with any of refresh() (settings changed),
-// onDomChange(), onStorage(key) and dispose(), which activate() calls.
+// onDomChange(), onStorage(key) and dispose(), which activate() calls. Hiding
+// "Running" and "Reading" also reads the agent status's statusOf(), and hears
+// of status changes through its onStatus().
 
 const STORAGE_KEY = 'openhands-extras:settings';
 // The running copy's dispose, on the page's window. Canvas disposes an app
 // before activating it again, but two copies folding the same chat, e.g.
 // after a dispose that failed part way, would undo each other's work forever.
 const INSTANCE = Symbol.for('openhands-extras');
-// Runs that ended while you were away, shared by every Canvas window and kept
-// across reloads until you open them.
 const UNSEEN_KEY = 'openhands-extras:unseen';
 const SECTION_ID = 'openhands-extras-settings';
 const WIDE_STYLE_ID = 'openhands-extras-wide-canvas';
@@ -51,7 +51,7 @@ const THINKING_KEY = 'THINKING$TITLE';
 const WIDE_CANVAS_CSS =
   '[data-agent-server-ui] .max-w-200.h-full.min-h-0 { max-width: none; }';
 
-// Status checks run at most this often, plus a slow poll while a run is going.
+// Status checks run at most this often, plus a poll while a run is going.
 const STATUS_MIN_GAP_MS = 3000;
 const STATUS_POLL_MS = 15000;
 // Otherwise, how often the count of conversations waiting for confirmation is
@@ -60,6 +60,8 @@ const COUNT_POLL_MS = 30000;
 const WAITING_COUNT_PATH =
   '/api/conversations/count?status=waiting_for_confirmation';
 const CONVERSATION_PATH = /\/conversations\/([0-9a-f-]{32,36})(?:\/|$)/i;
+const openConversationId = () =>
+  location.pathname.match(CONVERSATION_PATH)?.[1] ?? null;
 // Canvas starts the open conversation's title with its own status emoji,
 // which Tab status replaces rather than adding a second.
 const CANVAS_TITLE_STATUS = /^(?:🟢|✅|⚪|🔴) /u;
@@ -339,7 +341,7 @@ function watchQuietActivity(statusOf) {
   // Whether the last stretch pulses, for the open conversation running.
   let pulsing = false;
   const running = () => {
-    const id = location.pathname.match(CONVERSATION_PATH)?.[1];
+    const id = openConversationId();
     return !!id && statusOf(id) === 'running';
   };
 
@@ -382,7 +384,7 @@ function watchQuietActivity(statusOf) {
     )) {
       ours.remove();
     }
-    toggleStyle(QUIET_STYLE_ID, '', false);
+    removeElement(QUIET_STYLE_ID);
     toggles = new WeakMap();
   }
 
@@ -671,7 +673,7 @@ function watchAppCard(name, onChange) {
 
 const wideCanvas = () => ({
   refresh: () => toggleStyle(WIDE_STYLE_ID, WIDE_CANVAS_CSS, settings.wideCanvas),
-  dispose: () => toggleStyle(WIDE_STYLE_ID, '', false),
+  dispose: () => removeElement(WIDE_STYLE_ID),
 });
 
 // Edit the <title>'s text node in place: replacing it (document.title = …)
@@ -704,10 +706,13 @@ async function loadDataUrl(url) {
 // A coloured dot on the tab icon, holding a count when there is one. It swaps
 // the href of Canvas's own icon links: browsers don't reliably switch to an
 // extra icon link, and React owns these elements, so they must not be
-// removed. Their original hrefs come back when it clears.
+// removed. Their original hrefs come back when it clears; the dot's own carry
+// a mark to tell them apart.
+const FAVICON_MARK = 'openhands-extras-badge';
+const isBadgeHref = (href) => !!href?.includes(FAVICON_MARK);
+
 function faviconBadge() {
   const originalHrefs = new WeakMap();
-  const badgedHrefs = new Set();
   let href = null;
   let shown = null;
   // Canvas's icon as a data URL, for the icon URL it was loaded from.
@@ -725,7 +730,7 @@ function faviconBadge() {
   function apply() {
     for (const link of links()) {
       const current = link.getAttribute('href');
-      if (!badgedHrefs.has(current)) originalHrefs.set(link, current);
+      if (!isBadgeHref(current)) originalHrefs.set(link, current);
       const next = href ?? originalHrefs.get(link);
       if (next && current !== next) link.setAttribute('href', next);
     }
@@ -755,13 +760,134 @@ function faviconBadge() {
     const dot = count
       ? `<circle cx="22" cy="22" r="10" fill="${color}" stroke="#fff" stroke-width="2"/><text x="22" y="22" fill="#fff" font-family="sans-serif" font-size="${count > 9 ? 11 : 14}" font-weight="700" text-anchor="middle" dominant-baseline="central">${count > 9 ? '9+' : count}</text>`
       : `<circle cx="24" cy="24" r="7" fill="${color}" stroke="#fff" stroke-width="2"/>`;
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">${background}${dot}</svg>`;
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" id="${FAVICON_MARK}" viewBox="0 0 32 32">${background}${dot}</svg>`;
     href = `data:image/svg+xml,${encodeURIComponent(svg)}`;
-    badgedHrefs.add(href);
     apply();
   }
 
   return { show, apply, originalUrl };
+}
+
+// The tab's title, with a status prefix in place of Canvas's own status
+// emoji. It works from Canvas's title, which is the current one unless it's
+// still the one set here, and puts that back when there's nothing to show.
+function tabTitle() {
+  let applied = null;
+  // prefixFor(title) gives the prefix for the conversation's title, '' for
+  // none, or null to keep Canvas's; without it, Canvas's title stays as is.
+  return function render(prefixFor) {
+    const current = document.title;
+    const base = current === applied?.title ? applied.base : current;
+    let next = base;
+    if (prefixFor) {
+      const canvasStatus = base.match(CANVAS_TITLE_STATUS)?.[0] ?? '';
+      const rest = base.slice(canvasStatus.length);
+      // Canvas's emoji is dropped too when the title itself starts with it.
+      const prefix =
+        prefixFor(rest) ??
+        (rest.startsWith(canvasStatus.trim()) ? '' : canvasStatus);
+      next = prefix + rest;
+    }
+    applied = next === base ? null : { title: next, base };
+    if (current !== next) setTitle(next);
+  };
+}
+
+// One badge for the whole installed app, which only shows outside a browser
+// tab.
+function appIconBadge() {
+  let shown = null;
+  return function show(count) {
+    if (count === shown) return;
+    shown = count;
+    const { navigator } = window;
+    const call = count
+      ? navigator.setAppBadge?.(count)
+      : navigator.clearAppBadge?.();
+    call?.catch(() => {});
+  };
+}
+
+// Runs that ended while you were away, until you open them: kept in
+// localStorage, so they're shared by every Canvas window and survive reloads.
+const unseenRuns = {
+  load() {
+    const ids = readJson(UNSEEN_KEY, []);
+    return new Set(Array.isArray(ids) ? ids : []);
+  },
+  mark(id, unseen) {
+    const ids = unseenRuns.load();
+    if (ids.has(id) === unseen) return;
+    if (unseen) ids.add(id);
+    else ids.delete(id);
+    try {
+      if (ids.size) localStorage.setItem(UNSEEN_KEY, JSON.stringify([...ids]));
+      else localStorage.removeItem(UNSEEN_KEY);
+    } catch {
+      // Storage full or blocked: the badge just won't count this run.
+    }
+  },
+  clear() {
+    try {
+      localStorage.removeItem(UNSEEN_KEY);
+    } catch {
+      // Nothing to keep up to date then.
+    }
+  },
+};
+
+// Run task at most once per gap, folding the calls in between into one run at
+// the end of it, and never two at once: a call during a run queues another.
+function throttle(task, gap) {
+  let last = 0;
+  let trailing = 0;
+  let running = false;
+  let again = false;
+
+  async function run() {
+    last = Date.now();
+    if (running) {
+      again = true;
+      return;
+    }
+    running = true;
+    try {
+      await task();
+    } catch {
+      // The next run tries again.
+    } finally {
+      running = false;
+    }
+    if (again) {
+      again = false;
+      request();
+    }
+  }
+
+  function request() {
+    const wait = last + gap - Date.now();
+    if (wait <= 0) {
+      run();
+    } else if (!trailing) {
+      trailing = setTimeout(() => {
+        trailing = 0;
+        run();
+      }, wait);
+    }
+  }
+
+  return {
+    request,
+    // Run without waiting out the gap, e.g. as settings change.
+    now() {
+      last = 0;
+      request();
+    },
+    cancel() {
+      clearTimeout(trailing);
+      trailing = 0;
+    },
+  };
 }
 
 // Follow the open conversation's status, and runs this tab saw that you've
@@ -772,17 +898,13 @@ function faviconBadge() {
 function watchAgentStatus(host, onRender) {
   const conversations = new Map();
   const favicon = faviconBadge();
+  const title = tabTitle();
+  const appBadge = appIconBadge();
+  const checks = throttle(check, STATUS_MIN_GAP_MS);
   let openId = null;
-  // The title we last set, and the one of Canvas's it came from.
-  let appliedTitle = null;
-  let appliedBadge = null;
   // Conversations waiting for confirmation anywhere, from the Agent Server.
   let waiting = 0;
-  let lastCheck = 0;
-  let trailing = 0;
   let poll = 0;
-  let inFlight = false;
-  let again = false;
   let disposed = false;
 
   // A browser window behind another app often still counts as visible.
@@ -794,27 +916,10 @@ function watchAgentStatus(host, onRender) {
     settings.appBadge ||
     settings.quietActivity;
   // The count of conversations that need your input feeds the app icon badge
-  // and the tab icon.
+  // and the tab icon: those waiting for confirmation, plus unseen runs.
   const counting = () => settings.tabStatus || settings.appBadge;
-  const loadUnseen = () => {
-    const ids = readJson(UNSEEN_KEY, []);
-    return new Set(Array.isArray(ids) ? ids : []);
-  };
   const needsYou = () =>
-    !disposed && counting() ? waiting + loadUnseen().size : 0;
-
-  function markUnseen(id, unseen) {
-    const ids = loadUnseen();
-    if (ids.has(id) === unseen) return;
-    if (unseen) ids.add(id);
-    else ids.delete(id);
-    try {
-      if (ids.size) localStorage.setItem(UNSEEN_KEY, JSON.stringify([...ids]));
-      else localStorage.removeItem(UNSEEN_KEY);
-    } catch {
-      // Storage full or blocked: the badge just won't count this run.
-    }
-  }
+    !disposed && counting() ? waiting + unseenRuns.load().size : 0;
 
   function badge() {
     const open = settings.tabStatus && conversations.get(openId);
@@ -828,51 +933,21 @@ function watchAgentStatus(host, onRender) {
   // are still going elsewhere: "⏳3" when the open one is running too, or
   // "✅ ⏳2" when it isn't. A lone badge is skipped when the title already
   // starts with the same emoji, and there's none without either.
-  function titlePrefix(title) {
+  function titlePrefix(rest) {
     const emoji = badge()?.emoji;
     const others = [...conversations].filter(
       ([id, entry]) => id !== openId && ACTIVE_STATUSES.has(entry.status),
     ).length;
     if (!others) {
       if (!emoji) return null;
-      return title.startsWith(emoji) ? '' : `${emoji} `;
+      return rest.startsWith(emoji) ? '' : `${emoji} `;
     }
     if (emoji === STATUS_BADGES.running.emoji) return `${emoji}${others + 1} `;
     return `${emoji ? `${emoji} ` : ''}${STATUS_BADGES.running.emoji}${others} `;
   }
 
-  // Work from Canvas's own title, which is the current one unless it's still
-  // the one we set. Our badge replaces Canvas's status emoji, and either is
-  // dropped when the conversation's title itself starts with it.
-  function renderTitle() {
-    const current = document.title;
-    const base = current === appliedTitle?.title ? appliedTitle.base : current;
-    let next = base;
-    if (settings.tabStatus && !disposed) {
-      const canvasStatus = base.match(CANVAS_TITLE_STATUS)?.[0] ?? '';
-      const rest = base.slice(canvasStatus.length);
-      const prefix =
-        titlePrefix(rest) ??
-        (rest.startsWith(canvasStatus.trim()) ? '' : canvasStatus);
-      next = prefix + rest;
-    }
-    appliedTitle = next === base ? null : { title: next, base };
-    if (current !== next) setTitle(next);
-  }
-
-  // One badge for the whole installed app, which only shows outside a
-  // browser tab: the conversations waiting for confirmation, plus the runs
-  // that ended while you were away until you open them.
-  function renderBadge() {
-    const count = settings.appBadge ? needsYou() : 0;
-    if (count === appliedBadge) return;
-    appliedBadge = count;
-    const { navigator } = window;
-    const call = count
-      ? navigator.setAppBadge?.(count)
-      : navigator.clearAppBadge?.();
-    call?.catch(() => {});
-  }
+  const renderTitle = () =>
+    title(settings.tabStatus && !disposed ? titlePrefix : null);
 
   function render() {
     renderTitle();
@@ -884,7 +959,7 @@ function watchAgentStatus(host, onRender) {
         (count ? STATUS_BADGES.waiting_for_confirmation.color : null),
       count,
     );
-    renderBadge();
+    appBadge(settings.appBadge ? needsYou() : 0);
     if (!disposed) onRender();
   }
 
@@ -896,14 +971,14 @@ function watchAgentStatus(host, onRender) {
     entry.status = next;
     entry.title = info.title || entry.title;
     if (ACTIVE_STATUSES.has(next)) entry.sawActive = true;
-    if (!ENDED_STATUSES.has(next)) markUnseen(id, false);
+    if (!ENDED_STATUSES.has(next)) unseenRuns.mark(id, false);
     const changedWhileAway =
       previous &&
       previous !== next &&
       entry.sawActive &&
       (id !== openId || away());
     if (!changedWhileAway) return;
-    if (counting() && ENDED_STATUSES.has(next)) markUnseen(id, true);
+    if (counting() && ENDED_STATUSES.has(next)) unseenRuns.mark(id, true);
     if (settings.notifications && NOTIFY_STATUSES.has(next)) {
       notify(host, {
         id,
@@ -920,14 +995,8 @@ function watchAgentStatus(host, onRender) {
   }
 
   async function check() {
-    lastCheck = Date.now();
-    if (inFlight) {
-      again = true;
-      return;
-    }
-    const nextOpenId = watching()
-      ? (location.pathname.match(CONVERSATION_PATH)?.[1] ?? null)
-      : null;
+    if (disposed) return;
+    const nextOpenId = watching() ? openConversationId() : null;
     if (nextOpenId !== openId) {
       openId = nextOpenId;
       if (openId && !conversations.has(openId)) {
@@ -935,18 +1004,17 @@ function watchAgentStatus(host, onRender) {
       }
       render();
     }
-    if (openId && !away()) markUnseen(openId, false);
+    if (openId && !away()) unseenRuns.mark(openId, false);
     for (const [id, entry] of conversations) {
       const followRun = watching() && ACTIVE_STATUSES.has(entry.status);
       if (id !== openId && !followRun) conversations.delete(id);
     }
     // Unseen runs are checked too, to drop ones resumed or deleted elsewhere.
     const unseen = counting()
-      ? [...loadUnseen()].filter((id) => !conversations.has(id))
+      ? [...unseenRuns.load()].filter((id) => !conversations.has(id))
       : [];
     const ids = [...conversations.keys(), ...unseen];
     if (ids.length || counting()) {
-      inFlight = true;
       try {
         // One request for every conversation followed; missing ones are null.
         const query = ids.map((id) => `ids=${id}`).join('&');
@@ -969,48 +1037,30 @@ function watchAgentStatus(host, onRender) {
             if (conversations.has(id)) {
               if (info) update(id, info);
             } else if (!ENDED_STATUSES.has(info?.execution_status)) {
-              markUnseen(id, false);
+              unseenRuns.mark(id, false);
             }
           });
         }
       } catch {
         // Keep the last known statuses; the next check retries.
-      } finally {
-        inFlight = false;
       }
       if (disposed) return;
       render();
     }
     schedulePoll();
-    if (again) {
-      again = false;
-      requestCheck();
-    }
   }
 
-  // Poll quickly while a run is going: runs you navigated away from don't
-  // re-render this page, and a run's last event can land between checks.
-  // Poll slowly while counting, for runs started elsewhere. Otherwise, page
-  // changes and coming back to the tab trigger checks.
+  // Poll every STATUS_POLL_MS while a run is going: runs you navigated away
+  // from don't re-render this page, and a run's last event can land between
+  // checks. Poll less often while counting, for runs started elsewhere.
+  // Otherwise, page changes and coming back to the tab trigger checks.
   function schedulePoll() {
     clearTimeout(poll);
     const running = [...conversations.values()].some((entry) =>
       ACTIVE_STATUSES.has(entry.status),
     );
     const wait = running ? STATUS_POLL_MS : counting() ? COUNT_POLL_MS : 0;
-    poll = wait ? setTimeout(requestCheck, wait) : 0;
-  }
-
-  function requestCheck() {
-    const wait = lastCheck + STATUS_MIN_GAP_MS - Date.now();
-    if (wait <= 0) {
-      check().catch(() => {});
-    } else if (!trailing) {
-      trailing = setTimeout(() => {
-        trailing = 0;
-        check().catch(() => {});
-      }, wait);
-    }
+    poll = wait ? setTimeout(checks.request, wait) : 0;
   }
 
   // Coming back to the tab or window clears the finished/error/paused badges.
@@ -1018,9 +1068,9 @@ function watchAgentStatus(host, onRender) {
     if (away() || !watching()) return;
     const open = conversations.get(openId);
     if (open && !ACTIVE_STATUSES.has(open.status)) open.sawActive = false;
-    if (openId) markUnseen(openId, false);
+    if (openId) unseenRuns.mark(openId, false);
     render();
-    requestCheck();
+    checks.request();
   }
 
   // Canvas rewrites the title on navigation, and may add icon links or reset
@@ -1042,26 +1092,25 @@ function watchAgentStatus(host, onRender) {
   return {
     statusOf: (id) => conversations.get(id)?.status ?? null,
     onDomChange() {
-      if (watching()) requestCheck();
+      if (watching()) checks.request();
     },
     // Another window marked or cleared a run: the open one can't be unseen
     // while you're looking at it.
     onStorage(key) {
       if (key !== UNSEEN_KEY) return;
-      if (openId && !away()) markUnseen(openId, false);
+      if (openId && !away()) unseenRuns.mark(openId, false);
       render();
     },
     // Also runs the first check, as activate() applies the initial settings.
     refresh() {
-      if (!counting()) localStorage.removeItem(UNSEEN_KEY);
+      if (!counting()) unseenRuns.clear();
       render();
-      lastCheck = 0;
-      requestCheck();
+      checks.now();
     },
     dispose() {
       disposed = true;
       headObserver.disconnect();
-      clearTimeout(trailing);
+      checks.cancel();
       clearTimeout(poll);
       document.removeEventListener('visibilitychange', onReturn);
       window.removeEventListener('focus', onReturn);
