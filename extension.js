@@ -98,6 +98,8 @@ const NOTIFY_STATUSES = new Set(['waiting_for_confirmation', ...ENDED_STATUSES])
 
 // check() says why a switch can't work, e.g. after a permission was revoked;
 // enable(), which defaults to it, may also ask the browser for what it needs.
+// status is 'follow' for a feature that needs conversation statuses, and
+// 'count' for one that also needs how many conversations need your input.
 const SWITCHES = [
   {
     key: 'wideCanvas',
@@ -106,11 +108,13 @@ const SWITCHES = [
   },
   {
     key: 'tabStatus',
+    status: 'count',
     label: 'Tab status',
     description: "Show the agent's status in the browser tab's title and icon.",
   },
   {
     key: 'notifications',
+    status: 'follow',
     label: 'Desktop notifications',
     description:
       'Notify you when the agent finishes or needs you while this tab is in the background.',
@@ -119,6 +123,7 @@ const SWITCHES = [
   },
   {
     key: 'confirmationSound',
+    status: 'follow',
     label: 'Confirmation sound',
     description:
       'Play a chime when the agent needs your confirmation while this tab is in the background.',
@@ -126,6 +131,7 @@ const SWITCHES = [
   },
   {
     key: 'appBadge',
+    status: 'count',
     label: 'App icon badge',
     description:
       "Show how many conversations need your input on the installed app's icon.",
@@ -139,6 +145,7 @@ const SWITCHES = [
   },
   {
     key: 'quietActivity',
+    status: 'follow',
     label: 'Hide "Running" and "Reading"',
     description:
       'Fold the agent\'s "Running" and "Reading" entries in the chat into "Thinking", which expands to show them.',
@@ -216,7 +223,7 @@ function toggleStyle(id, css, on) {
     return;
   }
   const style = headElement(id, 'style');
-  if (style.textContent !== css) style.textContent = css;
+  setProperty(style, 'textContent', css);
 }
 
 // The elements this app adds to Canvas's page body.
@@ -226,7 +233,15 @@ const ownChange = (record) =>
   !!record.target.closest?.(OWN_SELECTOR) ||
   [...record.addedNodes, ...record.removedNodes].every(ownNode);
 
-const setAttr = (element, name, on) => {
+// Every write to the page wakes the observers watching it, so these only
+// write what changed.
+const setProperty = (element, name, value) => {
+  if (element[name] !== value) element[name] = value;
+};
+const setAttribute = (element, name, value) => {
+  if (element.getAttribute(name) !== value) element.setAttribute(name, value);
+};
+const toggleAttr = (element, name, on) => {
   if (element.hasAttribute(name) !== on) element.toggleAttribute(name, on);
 };
 
@@ -284,7 +299,7 @@ function watchThemeColor() {
     }
     const meta = headElement(THEME_META_ID, 'meta', { first: true });
     meta.name = 'theme-color';
-    if (meta.content !== color) meta.content = color;
+    setProperty(meta, 'content', color);
   };
   const observer = new MutationObserver(apply);
   const track = () => {
@@ -331,6 +346,37 @@ function labelPattern(labels) {
   return new RegExp(`^(?:${sources.join('|')})$`);
 }
 
+// Canvas's titles to fold, as a pattern, and its "Thinking", by language:
+// English until Canvas's translations for the language arrive, when onLoad
+// runs so they can be used.
+const ENGLISH_QUIET_LABELS = {
+  title: labelPattern(QUIET_LABELS),
+  thinking: 'Thinking',
+};
+const quietLabelsByLanguage = new Map();
+function quietLabels(language, onLoad) {
+  if (!quietLabelsByLanguage.has(language)) {
+    quietLabelsByLanguage.set(language, ENGLISH_QUIET_LABELS);
+    if (language !== 'en') {
+      canvasTranslations(language).then((translated) => {
+        quietLabelsByLanguage.set(language, {
+          title: labelPattern(
+            Object.fromEntries(
+              Object.entries(QUIET_LABELS).map(([key, label]) => [
+                key,
+                translated[key] ?? label,
+              ]),
+            ),
+          ),
+          thinking: translated[THINKING_KEY] ?? ENGLISH_QUIET_LABELS.thinking,
+        });
+        onLoad();
+      });
+    }
+  }
+  return quietLabelsByLanguage.get(language);
+}
+
 // Canvas's own "Thinking" entry, with its chevron and lightbulb, as a toggle
 // for the entries it folds, with Canvas's focus ring for keyboard use.
 function buildThinking(onToggle) {
@@ -365,9 +411,8 @@ const expanded = (thinking) =>
 function watchQuietActivity(statusOf) {
   let active = false;
   let disposed = false;
-  let language = null;
-  let quietTitle = labelPattern(QUIET_LABELS);
-  let thinkingLabel = 'Thinking';
+  // Canvas's titles to fold and its "Thinking", in its current language.
+  let labels = ENGLISH_QUIET_LABELS;
   // Each stretch's toggle, by the stretch's first chat item.
   let toggles = new WeakMap();
   // Whether the last stretch pulses, for the open conversation running.
@@ -376,29 +421,6 @@ function watchQuietActivity(statusOf) {
     const id = openConversationId();
     return !!id && statusOf(id) === 'running';
   };
-
-  // Canvas's titles in its UI language, falling back to English.
-  function loadLabels() {
-    const next = canvasLanguage();
-    if (next === language) return;
-    language = next;
-    quietTitle = labelPattern(QUIET_LABELS);
-    thinkingLabel = 'Thinking';
-    if (next === 'en') return;
-    canvasTranslations(next).then((translated) => {
-      if (disposed || language !== next) return;
-      quietTitle = labelPattern(
-        Object.fromEntries(
-          Object.entries(QUIET_LABELS).map(([key, label]) => [
-            key,
-            translated[key] ?? label,
-          ]),
-        ),
-      );
-      thinkingLabel = translated[THINKING_KEY] ?? thinkingLabel;
-      apply();
-    });
-  }
 
   function reveal() {
     for (const element of document.querySelectorAll(
@@ -428,7 +450,7 @@ function watchQuietActivity(statusOf) {
       if (!row || row === item || !item.contains(row)) continue;
       rows.push(row);
       if (
-        quietTitle.test(title.textContent.trim()) &&
+        labels.title.test(title.textContent.trim()) &&
         !row.querySelector('[data-testid="status-icon"]')
       ) {
         quiet.push(row);
@@ -466,8 +488,8 @@ function watchQuietActivity(statusOf) {
     if (!chip) return;
     let ours = chip.querySelector(`:scope > [${CHIP_LABEL_ATTR}]`);
     const label = [...chip.children].findLast((child) => child !== ours);
-    const quiet = !!label && quietTitle.test(label.textContent.trim());
-    if (label) setAttr(label, QUIET_ATTR, quiet);
+    const quiet = !!label && labels.title.test(label.textContent.trim());
+    if (label) toggleAttr(label, QUIET_ATTR, quiet);
     if (!quiet) {
       ours?.remove();
       return;
@@ -477,7 +499,7 @@ function watchQuietActivity(statusOf) {
       ours.className = label.className;
       ours.setAttribute(CHIP_LABEL_ATTR, '');
     }
-    if (ours.textContent !== thinkingLabel) ours.textContent = thinkingLabel;
+    setProperty(ours, 'textContent', labels.thinking);
     if (label.nextElementSibling !== ours) label.after(ours);
   }
 
@@ -489,7 +511,7 @@ function watchQuietActivity(statusOf) {
       return;
     }
     active = true;
-    loadLabels();
+    labels = quietLabels(canvasLanguage(), apply);
     toggleStyle(
       QUIET_STYLE_ID,
       `[${QUIET_ATTR}]:not([${SHOWN_ATTR}]) { display: none !important; }`,
@@ -518,10 +540,9 @@ function watchQuietActivity(statusOf) {
         for (const node of nodes) hidden.set(node, open);
       }
       const path = open ? CHEVRON_UP_PATH : CHEVRON_DOWN_PATH;
-      const chevron = thinking.querySelector('path');
-      if (chevron.getAttribute('d') !== path) chevron.setAttribute('d', path);
+      setAttribute(thinking.querySelector('path'), 'd', path);
       const label = thinking.querySelector('span');
-      if (label.textContent !== thinkingLabel) label.textContent = thinkingLabel;
+      setProperty(label, 'textContent', labels.thinking);
       // Canvas's own pulse, which stops for people who ask for less motion.
       const pulse = pulsing && last === items.at(-1);
       label.classList.toggle('animate-pulse', pulse);
@@ -530,8 +551,8 @@ function watchQuietActivity(statusOf) {
     }
     for (const { item, rows } of items) {
       for (const node of [item, ...rows]) {
-        setAttr(node, QUIET_ATTR, hidden.has(node));
-        setAttr(node, SHOWN_ATTR, hidden.get(node) === true);
+        toggleAttr(node, QUIET_ATTR, hidden.has(node));
+        toggleAttr(node, SHOWN_ATTR, hidden.get(node) === true);
       }
     }
     for (const thinking of chat.querySelectorAll(`[${THINKING_ATTR}]`)) {
@@ -767,7 +788,7 @@ function faviconBadge() {
       const current = link.getAttribute('href');
       if (!isBadgeHref(current)) originalHrefs.set(link, current);
       const next = href ?? originalHrefs.get(link);
-      if (next && current !== next) link.setAttribute('href', next);
+      if (next) setAttribute(link, 'href', next);
     }
   }
 
@@ -945,14 +966,11 @@ function watchAgentStatus(host, onRender) {
   // A browser window behind another app often still counts as visible.
   const away = () => document.hidden || !document.hasFocus();
   const watching = () =>
-    settings.tabStatus ||
-    settings.notifications ||
-    settings.confirmationSound ||
-    settings.appBadge ||
-    settings.quietActivity;
+    SWITCHES.some((item) => item.status && settings[item.key]);
   // The count of conversations that need your input feeds the app icon badge
   // and the tab icon: those waiting for confirmation, plus unseen runs.
-  const counting = () => settings.tabStatus || settings.appBadge;
+  const counting = () =>
+    SWITCHES.some((item) => item.status === 'count' && settings[item.key]);
   const needsYou = () =>
     !disposed && counting() ? waiting + unseenRuns.load().size : 0;
 
