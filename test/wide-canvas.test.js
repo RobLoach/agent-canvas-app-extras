@@ -13,14 +13,14 @@ const wideSelector = (document) =>
     ?.textContent.split('{')[0]
     .trim();
 
-test('Wide Canvas is off by default', async (t) => {
+test('Wide canvas is off by default', async (t) => {
   const page = setupPage(t, { body: BODY });
   await activateExtension(page, fakeHost());
 
   assert.equal(wideSelector(page.document), undefined);
 });
 
-test('Wide Canvas widens the chat thread but not other max-w-200 columns', async (t) => {
+test('Wide canvas widens the chat thread but not other max-w-200 columns', async (t) => {
   const page = setupPage(t, { body: BODY, settings: { wideCanvas: true } });
   const dispose = await activateExtension(page, fakeHost());
 

@@ -6,7 +6,7 @@ An [OpenHands](https://www.openhands.dev/) Agent Canvas app that adds a few UI t
 
 | Name | What it does |
 | :-- | :-- |
-| **Wide Canvas** | Lets the chat use the full width of the canvas. |
+| **Wide canvas** | Lets the chat use the full width of the canvas. |
 | **Tab status** | Shows the agent's status in the tab's title and icon. |
 | **Desktop notifications** | Notifies you when the agent finishes or needs you while you're away. |
 | **Confirmation sound** | Chimes when the agent needs your confirmation while you're away. |
@@ -18,7 +18,7 @@ An [OpenHands](https://www.openhands.dev/) Agent Canvas app that adds a few UI t
 
 - The title starts with ⏳ running, ✋ needs your confirmation, ⏸️ paused, ✅ finished or ❌ stopped. It replaces Canvas's own status emoji, which shows ✅ even while the agent waits for you, and is left out when the conversation's title already starts with it.
 - The tab icon gets a matching coloured dot, numbered with how many conversations need your input, counted as for the app icon badge.
-- Runs you opened in the tab that are still going elsewhere are counted, like `⏳3` or `✅ ⏳2`.
+- Runs you opened in the tab that are still going elsewhere, running or waiting for your confirmation, are counted, like `⏳3` or `✅ ⏳2`.
 
 ### Desktop notifications
 
@@ -56,7 +56,7 @@ Feel free to propose more features in the issue queue.
 - The app is a single, dependency-free browser module: [`extension.js`](extension.js).
 - All settings are stored in the browser's `localStorage` under `openhands-extras:settings`, so they're per browser rather than per backend.
 - Canvas has no app API for settings, tab titles or page styles yet, so the app works with Canvas's markup directly: it adds its settings above the footer of its card (`data-testid="canvas-extension-card-agent-canvas-app-extras"`), and an OpenHands update that changes that markup can break a feature.
-- While any feature other than Wide Canvas or Title bar colour is on, the app asks the Agent Server for conversation statuses in one request (`GET /api/conversations?ids=…`): at most every 3 seconds while the chat is updating or when you come back to the tab, plus every 15 seconds while a run is going. Idle and finished conversations aren't polled.
+- While any feature other than Wide canvas or Title bar colour is on, the app asks the Agent Server for conversation statuses in one request (`GET /api/conversations?ids=…`): at most every 3 seconds while the chat is updating or when you come back to the tab, plus every 15 seconds while a run is going. Idle and finished conversations aren't polled.
 - Tab status and the app icon badge also ask how many conversations are waiting for confirmation (`GET /api/conversations/count?status=waiting_for_confirmation`) with each check, and every 30 seconds otherwise, to catch runs started elsewhere. Runs that ended unseen are kept in `localStorage` under `openhands-extras:unseen`.
 
 ### Tests

@@ -311,12 +311,10 @@ function watchThemeColor() {
     apply();
   };
   scheme?.addEventListener?.('change', apply);
+  // Switching it on or off changes the root followed, which applies it.
   return {
     onDomChange: track,
-    refresh() {
-      track();
-      apply();
-    },
+    refresh: track,
     dispose() {
       observer.disconnect();
       scheme?.removeEventListener?.('change', apply);
