@@ -82,12 +82,12 @@ test('expands a Thinking entry to show what it folded, and collapses it again', 
   await activateExtension(page, fakeHost());
   const [thinking] = toggles(page);
   const button = thinking.querySelector('button');
-  const chevron = () => thinking.querySelector('path').getAttribute('d').slice(0, 12);
-  assert.equal(chevron(), 'M201.4 374.6');
+  const turnedUp = () => thinking.querySelector('svg').classList.contains('rotate-180');
+  assert.equal(turnedUp(), false);
 
   button.click();
   assert.equal(button.getAttribute('aria-expanded'), 'true');
-  assert.equal(chevron(), 'M201.4 137.4');
+  assert.equal(turnedUp(), true);
   assert.deepEqual(shown(page), ['Running ls', 'Reading a.js', 'Thinking', 'Done.']);
 
   // It stays open as Canvas re-renders.
