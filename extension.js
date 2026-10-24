@@ -419,6 +419,14 @@ function watchQuietActivity(statusOf) {
   let toggles = new WeakMap();
   // Whether the last stretch pulses, for the open conversation running.
   let pulsing = false;
+  // The chat and activity chip, found again only once Canvas replaces them,
+  // and whether each row is one to fold, by row: a row's title doesn't
+  // change once Canvas renders it.
+  let chat = null;
+  let chip = null;
+  let quietRows = new WeakMap();
+  const find = (current, selector) =>
+    current?.isConnected ? current : document.querySelector(selector);
   const running = () => {
     const id = openConversationId();
     return !!id && statusOf(id) === 'running';
@@ -438,6 +446,7 @@ function watchQuietActivity(statusOf) {
     }
     removeElement(QUIET_STYLE_ID);
     toggles = new WeakMap();
+    quietRows = new WeakMap();
   }
 
   // Each chat item's event rows, the quiet ones among them, and whether
@@ -451,10 +460,12 @@ function watchQuietActivity(statusOf) {
       const row = title.parentElement?.parentElement;
       if (!row || row === item || !item.contains(row)) continue;
       rows.push(row);
-      if (
-        labels.title.test(title.textContent.trim()) &&
-        !row.querySelector('[data-testid="status-icon"]')
-      ) {
+      let known = quietRows.get(row);
+      if (known?.labels !== labels) {
+        known = { labels, quiet: labels.title.test(title.textContent.trim()) };
+        quietRows.set(row, known);
+      }
+      if (known.quiet && !row.querySelector('[data-testid="status-icon"]')) {
         quiet.push(row);
       }
     }
@@ -486,7 +497,7 @@ function watchQuietActivity(statusOf) {
   // The live activity chip above the message box says "Running …" too: show
   // "Thinking" in a label of ours beside Canvas's, which React keeps updating.
   function relabelChip() {
-    const chip = document.querySelector('[data-testid="live-activity-chip"]');
+    chip = find(chip, '[data-testid="live-activity-chip"]');
     if (!chip) return;
     let ours = chip.querySelector(`:scope > [${CHIP_LABEL_ATTR}]`);
     const label = [...chip.children].findLast((child) => child !== ours);
@@ -519,7 +530,7 @@ function watchQuietActivity(statusOf) {
       `[${QUIET_ATTR}]:not([${SHOWN_ATTR}]) { display: none !important; }`,
     );
     relabelChip();
-    const chat = document.querySelector('[data-testid="chat-scroll-container"]');
+    chat = find(chat, '[data-testid="chat-scroll-container"]');
     if (!chat) return;
     const items = [...chat.children].map(readItem);
     pulsing = running();
@@ -894,6 +905,36 @@ const unseenRuns = {
   },
 };
 
+// The Agent Server's ids drop the dashes Canvas's links have.
+const conversationKey = (id) => id.replaceAll('-', '').toLowerCase();
+
+// Conversations from the Agent Server, by id, with every load asked for at
+// the same moment, e.g. by the agent status and unread markers on the same
+// page change, sharing one request. Missing conversations are null.
+function conversationLoader(host) {
+  let batch = null;
+  return function load(ids) {
+    if (!batch) {
+      const next = { keys: new Set() };
+      next.result = Promise.resolve().then(async () => {
+        batch = null;
+        const keys = [...next.keys];
+        const query = keys.map((key) => `ids=${key}`).join('&');
+        const infos = await host.agentServer.request({
+          path: `/api/conversations?${query}`,
+        });
+        // Anything but a list would read as every run gone.
+        if (!Array.isArray(infos)) throw new Error('Unexpected conversations');
+        return new Map(keys.map((key, index) => [key, infos[index] ?? null]));
+      });
+      batch = next;
+    }
+    const { keys, result } = batch;
+    for (const id of ids) keys.add(conversationKey(id));
+    return result.then((byKey) => ids.map((id) => byKey.get(conversationKey(id))));
+  };
+}
+
 // Run task at most once per gap, folding the calls in between into one run at
 // the end of it, and never two at once: a call during a run queues another.
 function throttle(task, gap) {
@@ -936,8 +977,11 @@ function throttle(task, gap) {
 
   return {
     request,
-    // Run without waiting out the gap, e.g. as settings change.
+    // Run without waiting out the gap, e.g. as settings change, instead of
+    // the run that was waiting for it.
     now() {
+      clearTimeout(trailing);
+      trailing = 0;
       last = 0;
       request();
     },
@@ -953,7 +997,7 @@ function throttle(task, gap) {
 // a run ends or needs you while you're away from it. Canvas re-renders the
 // chat as events stream in, background tabs included, so DOM changes trigger
 // checks; onRender runs after every change in what's known.
-function watchAgentStatus(host, onRender) {
+function watchAgentStatus(host, loadConversations, onRender) {
   const conversations = new Map();
   const favicon = faviconBadge();
   const title = tabTitle();
@@ -985,20 +1029,26 @@ function watchAgentStatus(host, onRender) {
   }
 
   // The open conversation's badge, plus how many runs you opened in this tab
-  // are still going elsewhere: "⏳3" when the open one is running too, or
-  // "✅ ⏳2" when it isn't. A lone badge is skipped when the title already
-  // starts with the same emoji, and there's none without either.
+  // are still going elsewhere, running or waiting for your confirmation,
+  // counting the open one with them: "⏳3", "⏳1 ✋1" or "✅ ⏳2". A lone badge
+  // is skipped when the title already starts with the same emoji, and there's
+  // none without either.
   function titlePrefix(rest) {
     const emoji = badge()?.emoji;
-    const others = [...conversations].filter(
-      ([id, entry]) => id !== openId && ACTIVE_STATUSES.has(entry.status),
-    ).length;
-    if (!others) {
+    const elsewhere = (status) =>
+      [...conversations].filter(([id, entry]) => id !== openId && entry.status === status)
+        .length;
+    const counts = ['running', 'waiting_for_confirmation'].map((status) => {
+      const own = STATUS_BADGES[status].emoji;
+      return [own, elsewhere(status) + (emoji === own ? 1 : 0)];
+    });
+    if (counts.every(([own, count]) => count <= (emoji === own ? 1 : 0))) {
       if (!emoji) return null;
       return rest.startsWith(emoji) ? '' : `${emoji} `;
     }
-    if (emoji === STATUS_BADGES.running.emoji) return `${emoji}${others + 1} `;
-    return `${emoji ? `${emoji} ` : ''}${STATUS_BADGES.running.emoji}${others} `;
+    const parts = counts.filter(([, count]) => count).map(([own, count]) => `${own}${count}`);
+    if (emoji && !counts.some(([own]) => own === emoji)) parts.unshift(emoji);
+    return `${parts.join(' ')} `;
   }
 
   const renderTitle = () =>
@@ -1046,8 +1096,21 @@ function watchAgentStatus(host, onRender) {
       }).catch(() => {});
     }
     if (settings.confirmationSound && next === 'waiting_for_confirmation') {
-      playChime();
+      chime(id).catch(() => {});
     }
+  }
+
+  // Canvas plays its own sound for the open conversation when its sound
+  // notifications are on, so the chime is left to it there.
+  async function chime(id) {
+    if (id === openId) {
+      const canvas = await host.agentServer.request({ path: '/api/settings' });
+      const sound =
+        canvas?.enable_sound_notifications ??
+        canvas?.misc_settings?.app_preferences?.enable_sound_notifications;
+      if (sound || disposed) return;
+    }
+    playChime();
   }
 
   async function check() {
@@ -1072,20 +1135,14 @@ function watchAgentStatus(host, onRender) {
     const ids = [...conversations.keys(), ...unseen];
     if (ids.length || counting()) {
       try {
-        // One request for every conversation followed; missing ones are null.
-        const query = ids.map((id) => `ids=${id}`).join('&');
         const [infos, count] = await Promise.all([
-          ids.length
-            ? host.agentServer.request({ path: `/api/conversations?${query}` })
-            : [],
+          ids.length ? loadConversations(ids) : [],
           counting()
             ? host.agentServer
                 .request({ path: WAITING_COUNT_PATH })
                 .catch(() => waiting)
             : 0,
         ]);
-        // Anything but a list would read as every run gone: keep what's known.
-        if (!Array.isArray(infos)) throw new Error('Unexpected statuses');
         if (!disposed) {
           waiting = Number(count) || 0;
           ids.forEach((id, index) => {
@@ -1208,16 +1265,19 @@ const readState = {
   },
 };
 
-// The Agent Server's ids drop the dashes Canvas's links have.
-const conversationKey = (id) => id.replaceAll('-', '').toLowerCase();
 
 // Mark the conversations in the sidebar that changed since you last had them
 // open, with a dot after their title. Their update times come from the Agent
 // Server, checked as the page changes and every UNREAD_POLL_MS.
-function watchUnread(host) {
+function watchUnread(loadConversations) {
   // Each sidebar conversation's last update, by key, in ms.
   const updated = new Map();
+  // Each card's link, and the conversation it's for, read again only if the
+  // link changes.
+  const cardKeys = new WeakMap();
   const checks = throttle(check, STATUS_MIN_GAP_MS);
+  // What you've read, as stored, loaded again when another window changes it.
+  let state = null;
   let poll = 0;
   let active = false;
   let disposed = false;
@@ -1225,11 +1285,16 @@ function watchUnread(host) {
   const cards = () =>
     [...document.querySelectorAll('[data-testid="conversation-card"]')]
       .map((card) => {
-        // Their links carry the backend, as in ?backend=…
         const href = card.closest('a[href]')?.getAttribute('href');
-        const path = href && new URL(href, location.href).pathname;
-        const id = path?.match(CONVERSATION_PATH)?.[1];
-        return id && { card, key: conversationKey(id) };
+        let known = cardKeys.get(card);
+        if (known?.href !== href) {
+          // Their links carry the backend, as in ?backend=…
+          const path = href && new URL(href, location.href).pathname;
+          const id = path?.match(CONVERSATION_PATH)?.[1];
+          known = { href, key: id && conversationKey(id) };
+          cardKeys.set(card, known);
+        }
+        return known.key && { card, key: known.key };
       })
       .filter(Boolean);
 
@@ -1240,7 +1305,6 @@ function watchUnread(host) {
   };
 
   function render() {
-    const state = active ? readState.load() : null;
     const open = openKey();
     if (state && open && updated.has(open) && !(state.seen[open] >= updated.get(open))) {
       state.seen[open] = updated.get(open);
@@ -1274,11 +1338,7 @@ function watchUnread(host) {
     const keys = [...new Set(cards().map(({ key }) => key))];
     if (keys.length) {
       try {
-        const query = keys.map((key) => `ids=${key}`).join('&');
-        const infos = await host.agentServer.request({
-          path: `/api/conversations?${query}`,
-        });
-        if (!Array.isArray(infos)) throw new Error('Unexpected conversations');
+        const infos = await loadConversations(keys);
         infos.forEach((info, index) => {
           const at = Date.parse(info?.updated_at);
           if (!Number.isNaN(at)) updated.set(keys[index], at);
@@ -1288,8 +1348,10 @@ function watchUnread(host) {
       }
       if (!active) return;
       // The first check after switching on counts everything so far as read.
-      if (!readState.load() && updated.size) {
-        readState.save({ since: Math.max(...updated.values()), seen: {} });
+      state ??= readState.load();
+      if (!state && updated.size) {
+        state = { since: Math.max(...updated.values()), seen: {} };
+        readState.save(state);
       }
       render();
     }
@@ -1306,12 +1368,14 @@ function watchUnread(host) {
       if (on === active) return;
       active = on;
       if (on) {
+        state = readState.load();
         checks.now();
         return;
       }
       checks.cancel();
       clearTimeout(poll);
       readState.clear();
+      state = null;
       render();
     },
     onDomChange() {
@@ -1321,11 +1385,14 @@ function watchUnread(host) {
     },
     // Another window opened a conversation.
     onStorage(key) {
-      if (key === READ_KEY) render();
+      if (key !== READ_KEY || !active) return;
+      state = readState.load();
+      render();
     },
     dispose() {
       disposed = true;
       active = false;
+      state = null;
       checks.cancel();
       clearTimeout(poll);
       document.removeEventListener('visibilitychange', render);
@@ -1342,8 +1409,11 @@ export function activate(host) {
   window[INSTANCE]?.();
   loadSettings();
   // Hiding "Running" and "Reading" pulses on the open conversation's status.
+  const loadConversations = conversationLoader(host);
   const quietActivity = watchQuietActivity((id) => agentStatus.statusOf(id));
-  const agentStatus = watchAgentStatus(host, () => quietActivity.onStatus());
+  const agentStatus = watchAgentStatus(host, loadConversations, () =>
+    quietActivity.onStatus(),
+  );
   const features = [
     watchAppCard(host.extension.name, (next) => {
       saveSettings(next);
@@ -1351,7 +1421,7 @@ export function activate(host) {
     }),
     wideCanvas(),
     agentStatus,
-    watchUnread(host),
+    watchUnread(loadConversations),
     watchThemeColor(),
     quietActivity,
   ];

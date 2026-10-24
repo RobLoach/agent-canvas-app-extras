@@ -67,5 +67,17 @@ test('only checks at once for switches that need statuses', async (t) => {
   assert.equal(host.requests.length, 1);
 
   await page.changeSettings({ notifications: true, wideCanvas: true, tabStatus: true });
-  assert.deepEqual(host.requests.slice(1), [`/api/conversations?ids=${A}`, COUNT_PATH]);
+  assert.deepEqual(host.requests.slice(1).sort(), [COUNT_PATH, `/api/conversations?ids=${A}`].sort());
+});
+
+test('a status switch turned on while a check waits out the gap checks once', async (t) => {
+  const { page, host } = await openA(t, { notifications: true }, 'idle');
+  await page.wait(1000);
+  page.mutate();
+  await page.wait(0);
+  await page.changeSettings({ notifications: true, tabStatus: true });
+  assert.equal(statusChecks(host).length, 2);
+
+  await page.wait(5000);
+  assert.equal(statusChecks(host).length, 2, 'not again when the gap is up');
 });

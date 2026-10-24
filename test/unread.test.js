@@ -112,3 +112,15 @@ test('checks the sidebar every 30 seconds, and removes its marks when disabled',
   page.dispose();
   assert.deepEqual(unread(page), []);
 });
+
+test('shares one request with the agent status on each page change', async (t) => {
+  const { page, host } = await open(t, {
+    path: `/conversations/${dashed(B)}`,
+    settings: { unreadMarkers: true, notifications: true },
+  });
+  const loads = () => host.requests.filter((path) => path.startsWith('/api/conversations?'));
+  assert.deepEqual(loads(), [`/api/conversations?ids=${B}&ids=${A}`]);
+
+  await page.check();
+  assert.equal(loads().length, 2);
+});

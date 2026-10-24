@@ -290,3 +290,23 @@ test("says the status in Canvas's language", async (t) => {
   );
   assert.deepEqual(fetched, ['/locales/de/openhands.json'], 'fetched once');
 });
+
+test("leaves the open conversation's chime to Canvas's own sound when that's on", async (t) => {
+  const { page, host } = await watchRun(t, { confirmationSound: true });
+  const request = host.agentServer.request;
+  host.agentServer.request = async (call) =>
+    call.path === '/api/settings'
+      ? { misc_settings: { app_preferences: { enable_sound_notifications: true } } }
+      : request(call);
+  page.hidden = true;
+  await finish(page, host, A, 'waiting_for_confirmation');
+  assert.deepEqual(page.tones, []);
+
+  // Canvas only sounds for the conversation on screen.
+  await finish(page, host, A, 'running');
+  page.hidden = false;
+  page.navigate(`/conversations/${B}`);
+  await page.check();
+  await finish(page, host, A, 'waiting_for_confirmation');
+  assert.deepEqual(page.tones, [880, 660]);
+});

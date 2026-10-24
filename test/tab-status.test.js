@@ -224,3 +224,21 @@ test("redraws the dot on Canvas's own icon when that changes", async (t) => {
     'https://canvas.test/favicon-light.svg',
   ]);
 });
+
+test('counts runs waiting for your confirmation apart from running ones', async (t) => {
+  const { page, host } = await start(t, {
+    path: `/conversations/${B}`,
+    head: `<title>My chat</title>${HEAD}`,
+    settings: { tabStatus: true },
+    statuses: { [A]: 'running', [B]: 'running' },
+  });
+  page.navigate(`/conversations/${A}`);
+  await page.check();
+  host.statuses[B] = 'waiting_for_confirmation';
+  await page.check();
+  assert.equal(page.document.title, '⏳1 ✋1 My chat');
+
+  host.statuses[A] = 'finished';
+  await page.check();
+  assert.equal(page.document.title, '✅ ✋1 My chat');
+});

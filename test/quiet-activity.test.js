@@ -268,3 +268,27 @@ test('the Thinking toggle has a focus ring and a pulse that respects reduced mot
     [true, true],
   );
 });
+
+test('reads rows again when the language changes, and finds a new chat', async (t) => {
+  const page = openChat(t, [item(row('Führt <strong>ls</strong> aus'))]);
+  await activateExtension(page, fakeHost());
+  assert.deepEqual(shown(page), ['Führt ls aus']);
+
+  globalThis.fetch = async () => ({
+    ok: true,
+    json: async () => ({ ACTION_MESSAGE$RUN: 'Führt <cmd>{{command}}</cmd> aus' }),
+  });
+  page.document.documentElement.lang = 'de';
+  page.mutate();
+  await flush();
+  assert.deepEqual(shown(page), ['Thinking']);
+
+  // Canvas mounts a new chat, as when you open another conversation.
+  const next = page.document.createElement('div');
+  next.setAttribute('data-testid', 'chat-scroll-container');
+  next.innerHTML = item(row('Running <strong>pwd</strong>')) + item(message('Done.'));
+  chat(page).replaceWith(next);
+  page.mutate();
+  await flush();
+  assert.deepEqual(shown(page), ['Thinking', 'Done.']);
+});
