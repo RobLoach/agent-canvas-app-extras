@@ -175,13 +175,20 @@ export function setupPage(
 }
 
 // A host as Canvas passes to activate(), backed by fake conversations.
-export function fakeHost({ statuses = {}, titles = {}, finalResponse = '' } = {}) {
+export function fakeHost({
+  statuses = {},
+  titles = {},
+  updated = {},
+  finalResponse = '',
+} = {}) {
   const host = {
     apiVersion: '1',
     extension: { name: 'agent-canvas-app-extras', version: '0.0.0', resolvedRef: null },
     backend: { id: 'test', kind: 'local', orgId: null },
     statuses,
     titles,
+    // Each conversation's update time, as the ISO string the server gives.
+    updated,
     requests: [],
     navigations: [],
     navigate: (path) => host.navigations.push(path),
@@ -201,6 +208,7 @@ export function fakeHost({ statuses = {}, titles = {}, finalResponse = '' } = {}
         return url.searchParams.getAll('ids').map((id) => ({
           execution_status: host.statuses[id] ?? 'idle',
           title: host.titles[id] ?? null,
+          updated_at: host.updated[id] ?? null,
         }));
       },
     },
@@ -228,10 +236,10 @@ export async function activateExtension(page, host) {
 // conversations. before(page) sets the page up first, e.g. its storage.
 export async function start(
   t,
-  { path = '/apps', statuses, titles, finalResponse, before, ...pageOptions } = {},
+  { path = '/apps', statuses, titles, updated, finalResponse, before, ...pageOptions } = {},
 ) {
   const page = setupPage(t, { url: `https://canvas.test${path}`, ...pageOptions });
-  const host = fakeHost({ statuses, titles, finalResponse });
+  const host = fakeHost({ statuses, titles, updated, finalResponse });
   before?.(page);
   await activateExtension(page, host);
   return { page, host };

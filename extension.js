@@ -7,6 +7,8 @@
 // - Confirmation sound: chimes when a run needs you while you're away from it.
 // - App icon badge: counts the conversations waiting on you on the installed
 //   app's icon.
+// - Unread markers: marks the conversations in the sidebar that changed since
+//   you last had them open.
 // - Title bar colour: matches the installed app's title bar to Canvas's theme.
 // - Hide "Running" and "Reading": folds those chat entries into "Thinking"
 //   rows that expand to show them, and says "Thinking" on the activity chip.
@@ -22,6 +24,7 @@ const STORAGE_KEY = 'openhands-extras:settings';
 // after a dispose that failed part way, would undo each other's work forever.
 const INSTANCE = Symbol.for('openhands-extras');
 const UNSEEN_KEY = 'openhands-extras:unseen';
+const READ_KEY = 'openhands-extras:read';
 const SECTION_ID = 'openhands-extras-settings';
 const WIDE_STYLE_ID = 'openhands-extras-wide-canvas';
 const THEME_META_ID = 'openhands-extras-theme-color';
@@ -30,6 +33,7 @@ const QUIET_ATTR = 'data-extras-quiet';
 const SHOWN_ATTR = 'data-extras-shown';
 const THINKING_ATTR = 'data-extras-thinking';
 const CHIP_LABEL_ATTR = 'data-extras-chip-label';
+const UNREAD_ATTR = 'data-extras-unread';
 const EVENT_TITLE = '[data-testid="generic-event-message-title"]';
 // Canvas's titles for commands and file reads, before and after, in English
 // until its translations for the page's language load.
@@ -57,11 +61,15 @@ const STATUS_POLL_MS = 15000;
 // Otherwise, how often the count of conversations waiting for confirmation is
 // refreshed, as runs started elsewhere don't touch this page.
 const COUNT_POLL_MS = 30000;
+// How often the sidebar's conversations are checked for changes.
+const UNREAD_POLL_MS = 30000;
 const WAITING_COUNT_PATH =
   '/api/conversations/count?status=waiting_for_confirmation';
 const CONVERSATION_PATH = /\/conversations\/([0-9a-f-]{32,36})(?:\/|$)/i;
 const openConversationId = () =>
   location.pathname.match(CONVERSATION_PATH)?.[1] ?? null;
+// A browser window behind another app often still counts as visible.
+const away = () => document.hidden || !document.hasFocus();
 // Canvas starts the open conversation's title with its own status emoji,
 // which Tab status replaces rather than adding a second.
 const CANVAS_TITLE_STATUS = /^(?:🟢|✅|⚪|🔴) /u;
@@ -136,6 +144,12 @@ const SWITCHES = [
     description:
       "Show how many conversations need your input on the installed app's icon.",
     check: appBadgeProblem,
+  },
+  {
+    key: 'unreadMarkers',
+    label: 'Unread markers',
+    description:
+      'Mark the conversations in the sidebar that changed since you last had them open.',
   },
   {
     key: 'themeColor',
@@ -222,7 +236,7 @@ function setStyle(id, css) {
 }
 
 // The elements this app adds to Canvas's page body.
-const OWN_SELECTOR = `#${SECTION_ID}, [${THINKING_ATTR}], [${CHIP_LABEL_ATTR}]`;
+const OWN_SELECTOR = `#${SECTION_ID}, [${THINKING_ATTR}], [${CHIP_LABEL_ATTR}], [${UNREAD_ATTR}]`;
 const ownNode = (node) => node.nodeType === Node.ELEMENT_NODE && node.matches(OWN_SELECTOR);
 const ownChange = (record) =>
   !!record.target.closest?.(OWN_SELECTOR) ||
@@ -953,8 +967,6 @@ function watchAgentStatus(host, onRender) {
   // The settings that need statuses, as last applied.
   let statusSettings;
 
-  // A browser window behind another app often still counts as visible.
-  const away = () => document.hidden || !document.hasFocus();
   const watching = () =>
     SWITCHES.some((item) => item.status && settings[item.key]);
   // The count of conversations that need your input feeds the app icon badge
@@ -1171,6 +1183,158 @@ function watchAgentStatus(host, onRender) {
   };
 }
 
+// Which conversations you've read, kept in localStorage so every Canvas
+// window shares it: since, the newest update when the markers were switched
+// on, by the server's clock, and seen, each conversation's update time when
+// you last had it open. Anything updated after both is unread.
+const readState = {
+  load() {
+    const state = readJson(READ_KEY, null);
+    return typeof state?.since === 'number' && state.seen ? state : null;
+  },
+  save(state) {
+    try {
+      localStorage.setItem(READ_KEY, JSON.stringify(state));
+    } catch {
+      // Storage full or blocked: what you've read won't be remembered.
+    }
+  },
+  clear() {
+    try {
+      localStorage.removeItem(READ_KEY);
+    } catch {
+      // Nothing to keep up to date then.
+    }
+  },
+};
+
+// The Agent Server's ids drop the dashes Canvas's links have.
+const conversationKey = (id) => id.replaceAll('-', '').toLowerCase();
+
+// Mark the conversations in the sidebar that changed since you last had them
+// open, with a dot after their title. Their update times come from the Agent
+// Server, checked as the page changes and every UNREAD_POLL_MS.
+function watchUnread(host) {
+  // Each sidebar conversation's last update, by key, in ms.
+  const updated = new Map();
+  const checks = throttle(check, STATUS_MIN_GAP_MS);
+  let poll = 0;
+  let active = false;
+  let disposed = false;
+
+  const cards = () =>
+    [...document.querySelectorAll('[data-testid="conversation-card"]')]
+      .map((card) => {
+        // Their links carry the backend, as in ?backend=…
+        const href = card.closest('a[href]')?.getAttribute('href');
+        const path = href && new URL(href, location.href).pathname;
+        const id = path?.match(CONVERSATION_PATH)?.[1];
+        return id && { card, key: conversationKey(id) };
+      })
+      .filter(Boolean);
+
+  // The open conversation is read while you're looking at it.
+  const openKey = () => {
+    const id = openConversationId();
+    return id && !away() ? conversationKey(id) : null;
+  };
+
+  function render() {
+    const state = active ? readState.load() : null;
+    const open = openKey();
+    if (state && open && updated.has(open) && !(state.seen[open] >= updated.get(open))) {
+      state.seen[open] = updated.get(open);
+      readState.save(state);
+    }
+    for (const { card, key } of cards()) {
+      const at = updated.get(key);
+      const unread =
+        !!state &&
+        key !== open &&
+        at > Math.max(state.since, state.seen[key] ?? 0);
+      let dot = card.querySelector(`[${UNREAD_ATTR}]`);
+      if (!unread) {
+        dot?.remove();
+        continue;
+      }
+      const title = card.querySelector('[data-testid="conversation-card-title"]');
+      if (!title) continue;
+      if (!dot) {
+        dot = document.createElement('span');
+        dot.setAttribute(UNREAD_ATTR, '');
+        dot.className = 'mr-1 size-1.5 shrink-0 rounded-full bg-contrast';
+        dot.innerHTML = '<span class="sr-only">Unread</span>';
+      }
+      if (title.nextElementSibling !== dot) title.after(dot);
+    }
+  }
+
+  async function check() {
+    if (!active) return;
+    const keys = [...new Set(cards().map(({ key }) => key))];
+    if (keys.length) {
+      try {
+        const query = keys.map((key) => `ids=${key}`).join('&');
+        const infos = await host.agentServer.request({
+          path: `/api/conversations?${query}`,
+        });
+        if (!Array.isArray(infos)) throw new Error('Unexpected conversations');
+        infos.forEach((info, index) => {
+          const at = Date.parse(info?.updated_at);
+          if (!Number.isNaN(at)) updated.set(keys[index], at);
+        });
+      } catch {
+        // Keep the last known times; the next check retries.
+      }
+      if (!active) return;
+      // The first check after switching on counts everything so far as read.
+      if (!readState.load() && updated.size) {
+        readState.save({ since: Math.max(...updated.values()), seen: {} });
+      }
+      render();
+    }
+    clearTimeout(poll);
+    poll = setTimeout(checks.request, UNREAD_POLL_MS);
+  }
+
+  document.addEventListener('visibilitychange', render);
+  window.addEventListener('focus', render);
+
+  return {
+    refresh() {
+      const on = settings.unreadMarkers && !disposed;
+      if (on === active) return;
+      active = on;
+      if (on) {
+        checks.now();
+        return;
+      }
+      checks.cancel();
+      clearTimeout(poll);
+      readState.clear();
+      render();
+    },
+    onDomChange() {
+      if (!active) return;
+      render();
+      checks.request();
+    },
+    // Another window opened a conversation.
+    onStorage(key) {
+      if (key === READ_KEY) render();
+    },
+    dispose() {
+      disposed = true;
+      active = false;
+      checks.cancel();
+      clearTimeout(poll);
+      document.removeEventListener('visibilitychange', render);
+      window.removeEventListener('focus', render);
+      render();
+    },
+  };
+}
+
 export function activate(host) {
   if (host.apiVersion !== '1') {
     throw new Error(`Extras requires host API 1, got ${host.apiVersion}.`);
@@ -1187,6 +1351,7 @@ export function activate(host) {
     }),
     wideCanvas(),
     agentStatus,
+    watchUnread(host),
     watchThemeColor(),
     quietActivity,
   ];

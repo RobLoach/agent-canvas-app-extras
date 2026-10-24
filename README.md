@@ -11,6 +11,7 @@ An [OpenHands](https://www.openhands.dev/) Agent Canvas app that adds a few UI t
 | **Desktop notifications** | Notifies you when the agent finishes or needs you while you're away. |
 | **Confirmation sound** | Chimes when the agent needs your confirmation while you're away. |
 | **App icon badge** | Counts the conversations that need your input on the installed app's icon. |
+| **Unread markers** | Marks the conversations in the sidebar that changed since you last had them open. |
 | **Title bar colour** | Matches the installed app's title bar to Canvas's colour theme. |
 | **Hide "Running" and "Reading"** | Folds those chat entries into expandable "Thinking" entries. |
 
@@ -29,6 +30,11 @@ An [OpenHands](https://www.openhands.dev/) Agent Canvas app that adds a few UI t
 
 - Works when Canvas is installed as an app with Chrome or Edge, or Safari's Add to Dock. Safari only shows it once notifications are allowed.
 - Counts every conversation waiting for your confirmation, plus runs that ended while you were away until you open them. Those are remembered across reloads and shared by all your Canvas windows in this browser.
+
+### Unread markers
+
+- A dot after a conversation's title in the sidebar means it changed since you last had it open. Opening it clears the dot, and the conversation you're looking at is never marked.
+- Everything counts as read when you switch it on. What you've read is remembered across reloads and shared by all your Canvas windows in this browser.
 
 ### Hide "Running" and "Reading"
 
@@ -58,6 +64,7 @@ Feel free to propose more features in the issue queue.
 - Canvas has no app API for settings, tab titles or page styles yet, so the app works with Canvas's markup directly: it adds its settings above the footer of its card (`data-testid="canvas-extension-card-agent-canvas-app-extras"`), and an OpenHands update that changes that markup can break a feature.
 - While any feature other than Wide canvas or Title bar colour is on, the app asks the Agent Server for conversation statuses in one request (`GET /api/conversations?ids=…`): at most every 3 seconds while the chat is updating or when you come back to the tab, plus every 15 seconds while a run is going. Idle and finished conversations aren't polled.
 - Tab status and the app icon badge also ask how many conversations are waiting for confirmation (`GET /api/conversations/count?status=waiting_for_confirmation`) with each check, and every 30 seconds otherwise, to catch runs started elsewhere. Runs that ended unseen are kept in `localStorage` under `openhands-extras:unseen`.
+- Unread markers ask for the sidebar's conversations in one request when the page changes, at most every 3 seconds, and every 30 seconds otherwise. What you've read is kept in `localStorage` under `openhands-extras:read`.
 
 ### Tests
 
