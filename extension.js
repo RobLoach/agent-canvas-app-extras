@@ -1,17 +1,6 @@
-// Extras: Agent Canvas tweaks, each switched on from this app's card on
-// Customize > Apps and saved in the browser's localStorage.
-// - Wide canvas: removes the chat window's maximum width.
-// - Tab status: badges the tab's title and icon with the agent's status.
-// - Desktop notifications: tells you when a run ends or needs you while
-//   you're away from it.
-// - Confirmation sound: chimes when a run needs you while you're away from it.
-// - App icon badge: counts the conversations waiting on you on the installed
-//   app's icon.
-// - Unread markers: marks the conversations in the sidebar that changed since
-//   you last had them open.
-// - Title bar colour: matches the installed app's title bar to Canvas's theme.
-// - Hide "Running" and "Reading": folds those chat entries into "Thinking"
-//   rows that expand to show them, and says "Thinking" on the activity chip.
+// Extras: Agent Canvas tweaks, each a switch in SWITCHES, turned on from this
+// app's card on Customize > Apps and saved in the browser's localStorage. The
+// README says what each does.
 //
 // Each feature is an object with any of refresh() (settings changed),
 // onDomChange(), onStorage(key) and dispose(), which activate() calls. Hiding

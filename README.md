@@ -17,7 +17,7 @@ An [OpenHands](https://www.openhands.dev/) Agent Canvas app that adds a few UI t
 
 ### Tab status
 
-- The title starts with ⏳ running, ✋ needs your confirmation, ⏸️ paused, ✅ finished or ❌ stopped. It replaces Canvas's own status emoji, which shows ✅ even while the agent waits for you, and is left out when the conversation's title already starts with it.
+- The title starts with ⏳ running, ✋ needs your confirmation, ⏸️ paused, ✅ finished or ❌ stopped, in place of Canvas's own status emoji, and is left out when the conversation's title already starts with it.
 - The tab icon gets a matching coloured dot, numbered with how many conversations need your input, counted as for the app icon badge.
 - Runs you opened in the tab that are still going elsewhere are counted, running ones with ⏳ and ones waiting for your confirmation with ✋, like `⏳3`, `⏳1 ✋1` or `✅ ⏳2`.
 
@@ -51,7 +51,7 @@ An [OpenHands](https://www.openhands.dev/) Agent Canvas app that adds a few UI t
 ## Install
 
 1. Visit **Customize > Apps** (`/apps`)
-2. Click on **Add app** at the top right
+2. Click **Add app** at the top right
 3. For the App source, enter:
    ```
    github:RobLoach/agent-canvas-app-extras
@@ -65,11 +65,9 @@ An [OpenHands](https://www.openhands.dev/) Agent Canvas app that adds a few UI t
 Feel free to propose more features in the issue queue.
 
 - The app is a single, dependency-free browser module: [`extension.js`](extension.js).
-- All settings are stored in the browser's `localStorage` under `openhands-extras:settings`, so they're per browser rather than per backend.
-- Canvas has no app API for settings, tab titles or page styles yet, so the app works with Canvas's markup directly: it adds its settings above the footer of its card (`data-testid="canvas-extension-card-agent-canvas-app-extras"`), and an OpenHands update that changes that markup can break a feature.
-- While any feature other than Wide canvas or Title bar colour is on, the app asks the Agent Server for conversation statuses in one request (`GET /api/conversations?ids=…`): at most every 3 seconds while the chat is updating or when you come back to the tab, plus every 15 seconds while a run is going. Idle and finished conversations aren't polled.
-- Tab status and the app icon badge also ask how many conversations are waiting for confirmation (`GET /api/conversations/count?status=waiting_for_confirmation`) every 30 seconds, to catch runs started elsewhere, and at once when a run the tab follows starts or stops waiting, when settings change, or when you come back to the tab. Runs that ended unseen are kept in `localStorage` under `openhands-extras:unseen`.
-- Unread markers ask for the sidebar's conversations when the page changes, at most every 3 seconds, and every 30 seconds otherwise, in the same request as the statuses when both are due. They rest while the tab is hidden, and check again when it shows. Canvas lists conversations by their last update, so one that changes always reaches the sidebar to be checked. What you've read is kept in `localStorage` under `openhands-extras:read`.
+- Canvas has no app API for settings, tab titles or page styles yet. The app works with Canvas's markup directly (its app card, chat, sidebar and title), so an OpenHands update that changes it can break a feature.
+- Settings, runs that ended while you were away, and what you've read are kept in the browser's `localStorage`, under `openhands-extras:settings`, `:unseen` and `:read`, so they're per browser rather than per backend.
+- While a feature that needs conversation statuses is on, the app asks the Agent Server for them in one request when the chat changes (at most every 3 seconds), every 15 seconds while a run is going, and every 30 seconds for the counts and unread markers. Nothing is requested while those features are off, and unread markers rest while the tab is hidden.
 
 ### Tests
 
