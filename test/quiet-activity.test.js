@@ -292,3 +292,22 @@ test('reads rows again when the language changes, and finds a new chat', async (
   await flush();
   assert.deepEqual(shown(page), ['Thinking', 'Done.']);
 });
+
+test('one feature failing to clean up still lets the rest clean up', async (t) => {
+  const page = openChat(t, [item(row('Running <strong>ls</strong>'))], {
+    quietActivity: true,
+    appBadge: true,
+  });
+  const host = fakeHost({ statuses: { [A]: 'waiting_for_confirmation' } });
+  const dispose = await activateExtension(page, host);
+  assert.equal(page.badge, 1);
+  assert.equal(toggles(page).length, 1);
+
+  // As a browser whose badge API throws.
+  page.window.navigator.clearAppBadge = () => {
+    throw new Error('Badges unavailable');
+  };
+  assert.throws(dispose, /Badges unavailable/);
+  assert.equal(toggles(page).length, 0);
+  assert.equal(page.document.getElementById('openhands-extras-quiet-activity'), null);
+});

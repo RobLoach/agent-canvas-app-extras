@@ -20,8 +20,9 @@
 
 const STORAGE_KEY = 'openhands-extras:settings';
 // The running copy's dispose, on the page's window. Canvas disposes an app
-// before activating it again, but two copies folding the same chat, e.g.
-// after a dispose that failed part way, would undo each other's work forever.
+// before activating it again; should a copy still be running anyway, the new
+// one stops it first, as two copies folding the same chat would undo each
+// other's work forever.
 const INSTANCE = Symbol.for('openhands-extras');
 const UNSEEN_KEY = 'openhands-extras:unseen';
 const READ_KEY = 'openhands-extras:read';
@@ -58,8 +59,9 @@ const WIDE_CANVAS_CSS =
 // Status checks run at most this often, plus a poll while a run is going.
 const STATUS_MIN_GAP_MS = 3000;
 const STATUS_POLL_MS = 15000;
-// Otherwise, how often the count of conversations waiting for confirmation is
-// refreshed, as runs started elsewhere don't touch this page.
+// How often the count of conversations waiting for confirmation is fetched,
+// for runs started elsewhere, which don't touch this page: it's fetched at
+// once when a run this tab follows starts or stops waiting.
 const COUNT_POLL_MS = 30000;
 // How often the sidebar's conversations are checked for changes.
 const UNREAD_POLL_MS = 30000;
@@ -1004,8 +1006,10 @@ function watchAgentStatus(host, loadConversations, onRender) {
   const appBadge = appIconBadge();
   const checks = throttle(check, STATUS_MIN_GAP_MS);
   let openId = null;
-  // Conversations waiting for confirmation anywhere, from the Agent Server.
+  // Conversations waiting for confirmation anywhere, from the Agent Server,
+  // and when that was last fetched.
   let waiting = 0;
+  let countedAt = -Infinity;
   let poll = 0;
   let disposed = false;
   // The settings that need statuses, as last applied.
@@ -1069,11 +1073,22 @@ function watchAgentStatus(host, loadConversations, onRender) {
     if (!disposed) onRender();
   }
 
+  const fetchCount = () => {
+    countedAt = Date.now();
+    return host.agentServer
+      .request({ path: WAITING_COUNT_PATH })
+      .then((count) => Number(count) || 0)
+      .catch(() => waiting);
+  };
+
+  // Whether the run started or stopped waiting for your confirmation.
   function update(id, info) {
     const entry = conversations.get(id);
-    if (!entry) return;
+    if (!entry) return false;
     const previous = entry.status;
     const next = info.execution_status;
+    const WAITING = 'waiting_for_confirmation';
+    const waitingChanged = (previous === WAITING) !== (next === WAITING);
     entry.status = next;
     entry.title = info.title || entry.title;
     if (ACTIVE_STATUSES.has(next)) entry.sawActive = true;
@@ -1083,7 +1098,7 @@ function watchAgentStatus(host, loadConversations, onRender) {
       previous !== next &&
       entry.sawActive &&
       (id !== openId || away());
-    if (!changedWhileAway) return;
+    if (!changedWhileAway) return waitingChanged;
     if (counting() && ENDED_STATUSES.has(next)) unseenRuns.mark(id, true);
     if (settings.notifications && NOTIFY_STATUSES.has(next)) {
       notify(host, {
@@ -1095,9 +1110,10 @@ function watchAgentStatus(host, loadConversations, onRender) {
         isDisposed: () => disposed,
       }).catch(() => {});
     }
-    if (settings.confirmationSound && next === 'waiting_for_confirmation') {
+    if (settings.confirmationSound && next === WAITING) {
       chime(id).catch(() => {});
     }
+    return waitingChanged;
   }
 
   // Canvas plays its own sound for the open conversation when its sound
@@ -1135,24 +1151,25 @@ function watchAgentStatus(host, loadConversations, onRender) {
     const ids = [...conversations.keys(), ...unseen];
     if (ids.length || counting()) {
       try {
+        const countDue = counting() && Date.now() - countedAt >= COUNT_POLL_MS;
         const [infos, count] = await Promise.all([
           ids.length ? loadConversations(ids) : [],
-          counting()
-            ? host.agentServer
-                .request({ path: WAITING_COUNT_PATH })
-                .catch(() => waiting)
-            : 0,
+          countDue ? fetchCount() : counting() ? waiting : 0,
         ]);
         if (!disposed) {
-          waiting = Number(count) || 0;
+          waiting = count;
+          let waitingChanged = false;
           ids.forEach((id, index) => {
             const info = infos[index];
             if (conversations.has(id)) {
-              if (info) update(id, info);
+              if (info && update(id, info)) waitingChanged = true;
             } else if (!ENDED_STATUSES.has(info?.execution_status)) {
               unseenRuns.mark(id, false);
             }
           });
+          if (waitingChanged && counting() && !countDue) {
+            waiting = await fetchCount();
+          }
         }
       } catch {
         // Keep the last known statuses; the next check retries.
@@ -1182,6 +1199,7 @@ function watchAgentStatus(host, loadConversations, onRender) {
     const open = conversations.get(openId);
     if (open && !ACTIVE_STATUSES.has(open.status)) open.sawActive = false;
     if (openId) unseenRuns.mark(openId, false);
+    countedAt = -Infinity;
     render();
     checks.request();
   }
@@ -1224,6 +1242,7 @@ function watchAgentStatus(host, loadConversations, onRender) {
         .join();
       if (next === statusSettings) return;
       statusSettings = next;
+      countedAt = -Infinity;
       checks.now();
     },
     dispose() {
@@ -1268,7 +1287,8 @@ const readState = {
 
 // Mark the conversations in the sidebar that changed since you last had them
 // open, with a dot after their title. Their update times come from the Agent
-// Server, checked as the page changes and every UNREAD_POLL_MS.
+// Server, checked as the page changes and every UNREAD_POLL_MS, except while
+// the tab is hidden, when nobody sees the sidebar: it's checked on return.
 function watchUnread(loadConversations) {
   // Each sidebar conversation's last update, by key, in ms.
   const updated = new Map();
@@ -1334,7 +1354,7 @@ function watchUnread(loadConversations) {
   }
 
   async function check() {
-    if (!active) return;
+    if (!active || document.hidden) return;
     const keys = [...new Set(cards().map(({ key }) => key))];
     if (keys.length) {
       try {
@@ -1359,7 +1379,12 @@ function watchUnread(loadConversations) {
     poll = setTimeout(checks.request, UNREAD_POLL_MS);
   }
 
-  document.addEventListener('visibilitychange', render);
+  function onVisibility() {
+    render();
+    if (active && !document.hidden) checks.now();
+  }
+
+  document.addEventListener('visibilitychange', onVisibility);
   window.addEventListener('focus', render);
 
   return {
@@ -1395,7 +1420,7 @@ function watchUnread(loadConversations) {
       state = null;
       checks.cancel();
       clearTimeout(poll);
-      document.removeEventListener('visibilitychange', render);
+      document.removeEventListener('visibilitychange', onVisibility);
       window.removeEventListener('focus', render);
       render();
     },
@@ -1408,6 +1433,7 @@ export function activate(host) {
   }
   window[INSTANCE]?.();
   loadSettings();
+  let disposed = false;
   // Hiding "Running" and "Reading" pulses on the open conversation's status.
   const loadConversations = conversationLoader(host);
   const quietActivity = watchQuietActivity((id) => agentStatus.statusOf(id));
@@ -1415,7 +1441,10 @@ export function activate(host) {
     quietActivity.onStatus(),
   );
   const features = [
+    // A switch can finish changing after the app is disposed, e.g. once you
+    // answer a permission prompt.
     watchAppCard(host.extension.name, (next) => {
+      if (disposed) return;
       saveSettings(next);
       each('refresh');
     }),
@@ -1444,15 +1473,24 @@ export function activate(host) {
     if (!records.every(ownChange)) each('onDomChange');
   });
   observer.observe(document.body, { childList: true, subtree: true });
-  let disposed = false;
+  // Each feature cleans up even if one before it fails, whose error is then
+  // passed on for Canvas to report.
   const dispose = () => {
     if (disposed) return;
     disposed = true;
     if (window[INSTANCE] === dispose) delete window[INSTANCE];
     observer.disconnect();
     window.removeEventListener('storage', onStorage);
-    each('dispose');
+    let failure = null;
+    for (const feature of features) {
+      try {
+        feature.dispose?.();
+      } catch (error) {
+        failure ??= error;
+      }
+    }
     closeAudio();
+    if (failure) throw failure;
   };
   window[INSTANCE] = dispose;
   return dispose;

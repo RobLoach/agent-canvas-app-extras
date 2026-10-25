@@ -106,3 +106,26 @@ test('presents each setting as a switch, with a hint read out as it changes', as
     assert.equal(hint.getAttribute('aria-live'), 'polite', key);
   }
 });
+
+test('ignores a switch that finishes changing after the app is disabled', async (t) => {
+  const page = setupPage(t, { body: CARDS, settings: { wideCanvas: true } });
+  page.permission = 'default';
+  let answer;
+  page.window.Notification.requestPermission = () =>
+    new Promise((resolve) => {
+      answer = () => {
+        page.permission = 'granted';
+        resolve('granted');
+      };
+    });
+  const dispose = await activateExtension(page, fakeHost());
+  switchFor(page, 'notifications').click();
+  await flush();
+
+  // Disabled while the permission prompt is still open.
+  dispose();
+  answer();
+  await flush();
+  assert.equal(page.document.getElementById('openhands-extras-wide-canvas'), null);
+  assert.deepEqual(stored(page), { wideCanvas: true });
+});

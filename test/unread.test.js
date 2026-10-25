@@ -62,7 +62,8 @@ test('clears a conversation once you open it, and keeps it read as you watch', a
 
 test('marks the open conversation when it changes while you are away', async (t) => {
   const { page, host } = await open(t, { path: `/conversations/${dashed(A)}` });
-  page.hidden = true;
+  // In another app, with Canvas still on screen.
+  page.focused = false;
   host.updated[A] = LATER;
   await page.check();
   assert.deepEqual(unread(page), ['Alpha']);
@@ -123,4 +124,19 @@ test('shares one request with the agent status on each page change', async (t) =
 
   await page.check();
   assert.equal(loads().length, 2);
+});
+
+test('rests while the tab is hidden, and checks at once when it shows again', async (t) => {
+  const { page, host } = await open(t);
+  page.hidden = true;
+  const requests = host.requests.length;
+  host.updated[A] = LATER;
+  await page.check();
+  await page.wait(60_000);
+  assert.equal(host.requests.length, requests);
+
+  page.returnToTab();
+  await flush();
+  assert.equal(host.requests.length, requests + 1);
+  assert.deepEqual(unread(page), ['Alpha']);
 });

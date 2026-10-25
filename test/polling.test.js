@@ -81,3 +81,18 @@ test('a status switch turned on while a check waits out the gap checks once', as
   await page.wait(5000);
   assert.equal(statusChecks(host).length, 2, 'not again when the gap is up');
 });
+
+test('fetches the waiting count every 30 seconds even while a run is going', async (t) => {
+  const { page, host } = await openA(t, { tabStatus: true }, 'running');
+  for (let quarter = 0; quarter < 4; quarter++) await page.wait(15_000);
+  assert.equal(statusChecks(host).length, 5, 'statuses every 15 seconds');
+  assert.equal(counts(host).length, 3, 'the count every 30');
+});
+
+test('fetches the count at once when a run it follows starts waiting', async (t) => {
+  const { page, host } = await openA(t, { appBadge: true }, 'running');
+  host.statuses[A] = 'waiting_for_confirmation';
+  await page.check();
+  assert.equal(counts(host).length, 2);
+  assert.equal(page.badge, 1);
+});

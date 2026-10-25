@@ -124,7 +124,8 @@ test('only counts waiting conversations outside conversation pages', async (t) =
   });
   await page.check();
 
-  assert.deepEqual(host.requests, [COUNT_PATH, COUNT_PATH]);
+  // Not again on a page change before the count is due.
+  assert.deepEqual(host.requests, [COUNT_PATH]);
 });
 
 test('numbers the tab icon dot with the conversations that need you', async (t) => {
@@ -136,7 +137,7 @@ test('numbers the tab icon dot with the conversations that need you', async (t) 
   assert.match(href, />1<\/text>/);
 
   host.statuses[B] = 'running';
-  await page.check();
+  await page.wait(30_000);
   assert.equal(iconColor(page), 'canvas');
 });
 
