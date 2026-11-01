@@ -2,7 +2,7 @@
   "schema_version": 1,
   "name": "agent-canvas-app-extras",
   "display_name": "Extras",
-  "version": "0.13.0",
+  "version": "0.14.0",
   "description": "Agent status in your tab and app icon, notifications, unread markers, a quieter chat and more.",
   "entrypoint": "extension.js"
 }
