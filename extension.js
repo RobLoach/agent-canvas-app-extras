@@ -150,7 +150,7 @@ const SWITCHES = [
   {
     key: 'confirmationSound',
     status: 'follow',
-    label: 'Confirmation sound',
+    label: 'Notification sounds',
     description:
       'Play a chime when the agent needs your confirmation while this tab is in the background.',
     enable: unlockAudio,
@@ -178,7 +178,7 @@ const SWITCHES = [
   {
     key: 'quietActivity',
     status: 'follow',
-    label: 'Hide "Running" and "Reading"',
+    label: 'Collapse agent activity',
     description:
       'Fold the agent\'s "Running" and "Reading" entries in the chat into "Thinking", which expands to show them.',
   },

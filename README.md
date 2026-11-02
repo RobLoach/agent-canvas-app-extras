@@ -10,44 +10,35 @@ An [OpenHands](https://www.openhands.dev/) Agent Canvas app that adds a few UI t
 | **Responsive tables** | Stacks a table's rows when it's too wide for the chat. |
 | **Tab status** | Shows the agent's status in the tab's title and icon. |
 | **Desktop notifications** | Notifies you when the agent finishes or needs you while you're away. |
-| **Confirmation sound** | Chimes when the agent needs your confirmation while you're away. |
+| **Notification sounds** | Chimes when the agent needs your confirmation while you're away. |
 | **App icon badge** | Counts the conversations that need your input on the installed app's icon. |
 | **Unread markers** | Marks the conversations in the sidebar that changed since you last had them open. |
 | **Title bar colour** | Matches the installed app's title bar to Canvas's colour theme. |
-| **Hide "Running" and "Reading"** | Folds those chat entries into expandable "Thinking" entries. |
+| **Collapse agent activity** | Folds "Running" and "Reading" chat entries into expandable "Thinking" entries. |
 
 ### Tab status
 
-- The title starts with ⏳ running, ✋ needs your confirmation, ⏸️ paused, ✅ finished or ❌ stopped, in place of Canvas's own status emoji, and is left out when the conversation's title already starts with it.
-- The tab icon gets a matching coloured dot, numbered with how many conversations need your input, counted as for the app icon badge.
-- Runs you opened in the tab that are still going elsewhere are counted, running ones with ⏳ and ones waiting for your confirmation with ✋, like `⏳3`, `⏳1 ✋1` or `✅ ⏳2`.
+The tab's title starts with an emoji for the agent's status, like ⏳ running or ✅ finished. The tab icon gets a matching dot with how many conversations need your input. Runs still going in other conversations are counted too, like `⏳1 ✋1`.
 
 ### Desktop notifications
 
-- Shows the agent's final reply when it finishes, or why it stopped, in Canvas's language.
-- Clicking a notification opens its conversation.
+Shows the agent's final reply when it finishes, or why it stopped. Clicking a notification opens its conversation.
 
-### Confirmation sound
+### Notification sounds
 
-- Plays two short tones when a run needs your confirmation while you're away.
-- Canvas has sound notifications of its own, under Settings → App. While those are on, the conversation you have open is left to Canvas, so you don't hear both.
+Plays two short tones when a run needs your confirmation while you're away. If Canvas's own sounds are on (Settings → App), the open conversation is left to Canvas.
 
 ### App icon badge
 
-- Works when Canvas is installed as an app with Chrome or Edge, or Safari's Add to Dock. Safari only shows it once notifications are allowed.
-- Counts every conversation waiting for your confirmation, plus runs that ended while you were away until you open them. Those are remembered across reloads and shared by all your Canvas windows in this browser.
+Works when Canvas is installed as an app with Chrome, Edge or Safari. It counts conversations waiting for your confirmation, plus runs that ended while you were away.
 
 ### Unread markers
 
-- A dot after a conversation's title in the sidebar means it changed since you last had it open. Opening it clears the dot, and the conversation you're looking at is never marked.
-- Everything counts as read when you switch it on. What you've read is remembered across reloads and shared by all your Canvas windows in this browser.
+A dot after a conversation's title in the sidebar means it changed since you last opened it. Opening it clears the dot.
 
-### Hide "Running" and "Reading"
+### Collapse agent activity
 
-- Each stretch of the agent's "Running" and "Reading" entries becomes one "Thinking" entry, like Canvas's own, which expands to show them.
-- The agent's messages, edits and timed out commands stay visible.
-- The last "Thinking" pulses while the conversation is running, and the activity chip above the message box says "Thinking" for those entries too.
-- Follows Canvas's language.
+The agent's "Running" and "Reading" entries fold into one expandable "Thinking" entry, like Canvas's own. Messages, edits and timed out commands stay visible.
 
 ## Install
 
