@@ -16,30 +16,6 @@ An [OpenHands](https://www.openhands.dev/) Agent Canvas app that adds a few UI t
 | **Title bar colour** | Matches the installed app's title bar to Canvas's colour theme. |
 | **Collapse agent activity** | Folds "Running" and "Reading" chat entries into expandable "Thinking" entries. |
 
-### Tab status
-
-The tab's title starts with an emoji for the agent's status, like ⏳ running or ✅ finished. The tab icon gets a matching dot with how many conversations need your input. Runs still going in other conversations are counted too, like `⏳1 ✋1`.
-
-### Desktop notifications
-
-Shows the agent's final reply when it finishes, or why it stopped. Clicking a notification opens its conversation.
-
-### Notification sounds
-
-Plays two short tones when a run needs your confirmation while you're away. If Canvas's own sounds are on (Settings → App), the open conversation is left to Canvas.
-
-### App icon badge
-
-Works when Canvas is installed as an app with Chrome, Edge or Safari. It counts conversations waiting for your confirmation, plus runs that ended while you were away.
-
-### Unread markers
-
-A dot after a conversation's title in the sidebar means it changed since you last opened it. Opening it clears the dot.
-
-### Collapse agent activity
-
-The agent's "Running" and "Reading" entries fold into one expandable "Thinking" entry, like Canvas's own. Messages, edits and timed out commands stay visible.
-
 ## Install
 
 1. Visit **Customize > Apps** (`/apps`)
