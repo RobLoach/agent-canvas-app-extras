@@ -129,3 +129,21 @@ test('ignores a switch that finishes changing after the app is disabled', async 
   assert.equal(page.document.getElementById('openhands-extras-wide-canvas'), null);
   assert.deepEqual(stored(page), { wideCanvas: true });
 });
+
+test('resets the settings, turning every feature off', async (t) => {
+  const page = setupPage(t, {
+    body: CARDS,
+    settings: { wideCanvas: true, tabStatus: true },
+  });
+  await activateExtension(page, fakeHost());
+  assert.ok(page.document.getElementById('openhands-extras-wide-canvas'));
+
+  page.document.querySelector('[data-testid="extras-reset-settings"]').click();
+  await flush();
+
+  assert.equal(page.window.localStorage.getItem('openhands-extras:settings'), null);
+  assert.equal(page.document.getElementById('openhands-extras-wide-canvas'), null);
+  assert.equal(switchFor(page, 'wideCanvas').checked, false);
+  assert.equal(switchFor(page, 'tabStatus').checked, false);
+  assert.equal(page.document.querySelectorAll('#openhands-extras-settings').length, 1);
+});

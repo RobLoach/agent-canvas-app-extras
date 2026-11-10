@@ -214,9 +214,11 @@ function loadSettings() {
   settings = { ...DEFAULT_SETTINGS, ...readJson(STORAGE_KEY, {}) };
 }
 
+// Saves the settings, or with none, removes them, turning every feature off.
 function saveSettings(next) {
-  settings = next;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  settings = next ?? DEFAULT_SETTINGS;
+  if (next) localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  else localStorage.removeItem(STORAGE_KEY);
 }
 
 // One of our own elements in <head>, by id, created on first use.
@@ -728,7 +730,8 @@ function buildSwitch(item, onChange) {
 // App cards on Customize > Apps have no host API for settings, so add a
 // section above this app's card footer. React may insert its own nodes
 // before the footer later, so re-place the section whenever it's displaced,
-// and rebuild it when another tab changes the settings.
+// and rebuild it when another tab changes the settings. Its reset button
+// passes no settings, and rebuilds it with every switch off.
 function watchAppCard(name, onChange) {
   const cardSelector = `article[data-testid="canvas-extension-card-${name}"]`;
   function place() {
@@ -741,6 +744,18 @@ function watchAppCard(name, onChange) {
     section.id = SECTION_ID;
     section.className = 'flex min-w-0 flex-col gap-4 border-t border-border pt-3';
     section.append(...SWITCHES.map((item) => buildSwitch(item, onChange)));
+    const reset = document.createElement('button');
+    reset.type = 'button';
+    reset.dataset.testid = 'extras-reset-settings';
+    reset.className =
+      'w-fit cursor-pointer rounded-sm text-sm underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus';
+    reset.textContent = 'Reset settings';
+    reset.addEventListener('click', () => {
+      onChange(null);
+      removeElement(SECTION_ID);
+      place();
+    });
+    section.append(reset);
     footer.before(section);
   }
   place();
