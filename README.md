@@ -26,7 +26,7 @@ An [OpenHands](https://www.openhands.dev/) Agent Canvas app that adds a few UI t
    ```
 4. Click **Install**
 5. **Enable** the Extras app
-6. Turn on the features you want in the Extras card
+6. Turn on the features you want in the Extras card, or click **Reset settings** to turn them all off
 
 ## Development
 
