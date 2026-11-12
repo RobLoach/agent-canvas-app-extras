@@ -462,29 +462,30 @@ async function openLatest(host) {
 
 function installableApp(host) {
   let launches = false;
-  let pngs = [];
+  let pngs = null;
   let touchIcon = null;
   let pngsFor = null;
   let viewport = null;
   let viewportContent = null;
 
-  // Canvas's favicon as PNG icons, once per URL; none until they're drawn.
+  // Canvas's favicon as PNG icons, once per URL: null until they're drawn,
+  // and none where the browser can't draw them.
   function drawIcons(svgUrl) {
     if (pngsFor === svgUrl) return;
     pngsFor = svgUrl;
-    pngs = [];
+    pngs = null;
     touchIcon = null;
     loadImage(svgUrl).then((image) => {
-      if (!image || pngsFor !== svgUrl) return;
+      if (pngsFor !== svgUrl) return;
       const drawn = PNG_ICONS.map(([size, purpose]) => ({
-        src: pngIcon(image, size, purpose),
+        src: image && pngIcon(image, size, purpose),
         sizes: `${size}x${size}`,
         type: 'image/png',
         purpose,
       }));
-      if (drawn.some(({ src }) => !src)) return;
-      pngs = drawn;
-      touchIcon = pngIcon(image, TOUCH_ICON_SIZE, 'any');
+      const ok = drawn.every(({ src }) => src);
+      pngs = ok ? drawn : [];
+      if (ok) touchIcon = pngIcon(image, TOUCH_ICON_SIZE, 'any');
       apply();
     });
   }
@@ -538,15 +539,19 @@ function installableApp(host) {
       // where they point without reloading Canvas.
       launch_handler: { client_mode: ['focus-existing', 'auto'] },
       icons: [
-        ...pngs,
+        ...(pngs ?? []),
         { src: svgUrl, sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
       ],
     };
-    const href = `data:application/manifest+json,${encodeURIComponent(JSON.stringify(manifest))}`;
-    const link = headElement(MANIFEST_ID, 'link', {
-      attributes: { rel: 'manifest', href },
-    });
-    setAttribute(link, 'href', href);
+    // Browsers may only read the first manifest linked, so it waits for the
+    // PNG icons that Android needs to install the app.
+    if (pngs) {
+      const href = `data:application/manifest+json,${encodeURIComponent(JSON.stringify(manifest))}`;
+      const link = headElement(MANIFEST_ID, 'link', {
+        attributes: { rel: 'manifest', href },
+      });
+      setAttribute(link, 'href', href);
+    }
     const touch = headElement(TOUCH_ICON_ID, 'link', {
       attributes: { rel: 'apple-touch-icon' },
     });

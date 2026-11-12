@@ -76,6 +76,14 @@ export function setupPage(
     page.badge = 0;
   };
 
+  // Images fail to load, as jsdom doesn't load them.
+  window.Image = class {
+    set src(url) {
+      this.url = url;
+      setImmediate(() => this.onerror());
+    }
+  };
+
   // Records the tones the app plays; jsdom has no Web Audio.
   window.AudioContext = class {
     currentTime = 0;

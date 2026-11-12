@@ -225,3 +225,21 @@ test('takes launches into the open window, under the base path', async (t) => {
   consumer({ targetURL: 'https://canvas.test/canvas/settings' });
   assert.equal(host.navigations.length, 2);
 });
+
+test('links the manifest only once its icons are drawn', async (t) => {
+  const page = setupPage(t, { head: HEAD, body: BODY, settings: ON });
+  let loaded = null;
+  page.window.Image = class {
+    set src(url) {
+      loaded = () => this.onerror();
+    }
+  };
+  await activateExtension(page, fakeHost());
+
+  assert.equal(link(page), null);
+  assert.equal(meta(page, 'apple-mobile-web-app-capable'), 'yes');
+
+  loaded();
+  await flush();
+  assert.equal(manifest(page).icons.length, 1);
+});
