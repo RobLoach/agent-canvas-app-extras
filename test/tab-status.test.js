@@ -196,7 +196,7 @@ test("leaves Canvas's title as it is while tab status is off", async (t) => {
 test('takes its badges and title changes back when disabled', async (t) => {
   const { page } = await openA(t, {
     title: '✅ ✅🔧 Misc | OpenHands',
-    settings: { tabStatus: true, appBadge: true },
+    settings: { tabStatus: true },
     statuses: { [A]: 'running', [B]: 'waiting_for_confirmation' },
   });
   assert.equal(iconColor(page), '#3b82f6');

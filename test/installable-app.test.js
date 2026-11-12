@@ -243,3 +243,60 @@ test('links the manifest only once its icons are drawn', async (t) => {
   await flush();
   assert.equal(manifest(page).icons.length, 1);
 });
+
+const THEME_BODY =
+  '<div data-agent-server-ui data-color-theme="dark" style="background-color: rgb(10, 20, 30)"></div>';
+const themeColor = (page) => page.document.querySelector('meta[name="theme-color"]');
+
+test('matches the theme-color to Canvas and follows theme changes', async (t) => {
+  const page = setupPage(t, { body: THEME_BODY, settings: { installableApp: true } });
+  // As in Canvas, <body> is marked too, and comes first.
+  page.document.body.setAttribute('data-agent-server-ui', '');
+  await activateExtension(page, fakeHost());
+  assert.equal(themeColor(page).content, 'rgb(10, 20, 30)');
+  assert.equal(page.document.head.firstElementChild, themeColor(page));
+
+  const root = page.document.querySelector('[data-color-theme]');
+  root.setAttribute('data-color-theme', 'light');
+  root.style.backgroundColor = 'rgb(250, 250, 250)';
+  await flush();
+  assert.equal(themeColor(page).content, 'rgb(250, 250, 250)');
+});
+
+test('follows a re-mounted theme root', async (t) => {
+  const page = setupPage(t, { body: THEME_BODY, settings: { installableApp: true } });
+  await activateExtension(page, fakeHost());
+
+  page.document.body.innerHTML =
+    '<div data-agent-server-ui style="background-color: rgb(1, 2, 3)"></div>';
+  await flush();
+  assert.equal(themeColor(page).content, 'rgb(1, 2, 3)');
+});
+
+test('leaves the theme-color alone while off, and removes it when disabled', async (t) => {
+  const page = setupPage(t, { body: THEME_BODY });
+  const dispose = await activateExtension(page, fakeHost());
+  assert.equal(themeColor(page), null);
+
+  await page.changeSettings({ installableApp: true });
+  assert.ok(themeColor(page));
+
+  dispose();
+  assert.equal(themeColor(page), null);
+});
+
+test('does not rebuild the manifest as the chat changes', async (t) => {
+  const page = setupPage(t, { head: HEAD, body: BODY, settings: ON });
+  await activateExtension(page, fakeHost());
+  let styles = 0;
+  const { getComputedStyle } = page.window;
+  page.window.getComputedStyle = (...args) => {
+    styles += 1;
+    return getComputedStyle(...args);
+  };
+
+  page.mutate();
+  page.mutate();
+  await flush();
+  assert.equal(styles, 0);
+});

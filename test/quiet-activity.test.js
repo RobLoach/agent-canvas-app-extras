@@ -296,7 +296,7 @@ test('reads rows again when the language changes, and finds a new chat', async (
 test('one feature failing to clean up still lets the rest clean up', async (t) => {
   const page = openChat(t, [item(row('Running <strong>ls</strong>'))], {
     quietActivity: true,
-    appBadge: true,
+    tabStatus: true,
   });
   const host = fakeHost({ statuses: { [A]: 'waiting_for_confirmation' } });
   const dispose = await activateExtension(page, host);

@@ -30,7 +30,7 @@ test('adds the settings above its own card footer on Customize > Apps', async (t
       .children.length,
     2,
   );
-  for (const key of ['wideCanvas', 'responsiveTables', 'tabStatus', 'notifications', 'confirmationSound', 'appBadge', 'themeColor', 'installableApp', 'quietActivity']) {
+  for (const key of ['wideCanvas', 'responsiveTables', 'tabStatus', 'notifications', 'confirmationSound', 'installableApp', 'quietActivity']) {
     assert.equal(switchFor(page, key).checked, false, key);
     assert.ok(hintFor(page, key), `${key} has a description`);
   }
@@ -146,4 +146,22 @@ test('resets the settings, turning every feature off', async (t) => {
   assert.equal(switchFor(page, 'wideCanvas').checked, false);
   assert.equal(switchFor(page, 'tabStatus').checked, false);
   assert.equal(page.document.querySelectorAll('#openhands-extras-settings').length, 1);
+});
+
+test('turns on the switches that merged ones moved into', async (t) => {
+  const page = setupPage(t, {
+    body: CARDS,
+    settings: { appBadge: true, themeColor: true },
+  });
+  await activateExtension(page, fakeHost());
+
+  assert.equal(switchFor(page, 'tabStatus').checked, true);
+  assert.equal(switchFor(page, 'installableApp').checked, true);
+
+  switchFor(page, 'tabStatus').click();
+  await flush();
+  const saved = JSON.parse(page.window.localStorage.getItem('openhands-extras:settings'));
+  assert.equal(saved.tabStatus, false);
+  assert.equal(saved.installableApp, true);
+  assert.equal('appBadge' in saved || 'themeColor' in saved, false);
 });

@@ -8,13 +8,11 @@ An [OpenHands](https://www.openhands.dev/) Agent Canvas app that adds a few UI t
 | :-- | :-- |
 | **Wide canvas** | Lets the chat use the full width of the canvas. |
 | **Responsive tables** | Stacks a table's rows when it's too wide for the chat. |
-| **Tab status** | Shows the agent's status in the tab's title and icon. |
+| **Tab status** | Shows the agent's status in the tab's title and icon, and counts the conversations that need your input on the installed app's icon. |
 | **Desktop notifications** | Notifies you when the agent finishes or needs you while you're away. |
 | **Notification sounds** | Chimes when the agent needs your confirmation while you're away. |
-| **App icon badge** | Counts the conversations that need your input on the installed app's icon. |
 | **Unread markers** | Marks the conversations in the sidebar that changed since you last had them open. |
-| **Title bar colour** | Matches the installed app's title bar to Canvas's colour theme. |
-| **Installable app** | Lets your browser install Canvas as an app, with New chat, Conversations and Settings shortcuts, clear of notches and home indicators. |
+| **Installable app** | Lets your browser install Canvas as an app, with New chat, Conversations and Settings shortcuts and a title bar in Canvas's colours, clear of notches and home indicators. |
 | **Collapse agent activity** | Folds "Running" and "Reading" chat entries into expandable "Thinking" entries. |
 
 ## Install

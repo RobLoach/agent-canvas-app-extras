@@ -32,7 +32,7 @@ async function finish(page, host, id = A, status = 'finished') {
 // The app on Customize > Apps with unseen runs stored, and a host that
 // answers status requests with respond(path).
 async function withUnseen(t, ids, respond) {
-  const page = setupPage(t, { settings: { appBadge: true } });
+  const page = setupPage(t, { settings: { tabStatus: true } });
   page.window.localStorage.setItem(UNSEEN, JSON.stringify(ids));
   const host = fakeHost();
   host.agentServer.request = async ({ path }) =>
@@ -142,7 +142,7 @@ test('does not chime while you are watching or when a run finishes', async (t) =
 });
 
 test('badges the app icon with the runs that need you until you open them', async (t) => {
-  const { page, host } = await watchRun(t, { appBadge: true });
+  const { page, host } = await watchRun(t, { tabStatus: true });
   assert.equal(page.badge, 0);
 
   page.navigate(`/conversations/${B}`);
@@ -159,7 +159,7 @@ test('badges the app icon with the runs that need you until you open them', asyn
 });
 
 test('badges a run that ends while you are away, and clears when you return', async (t) => {
-  const { page, host } = await watchRun(t, { appBadge: true });
+  const { page, host } = await watchRun(t, { tabStatus: true });
   await finish(page, host, A, 'waiting_for_confirmation');
   assert.equal(page.badge, 1, 'waiting for confirmation counts anywhere');
 
@@ -176,7 +176,7 @@ test('badges a run that ends while you are away, and clears when you return', as
 });
 
 test('clears the app icon badge when switched off', async (t) => {
-  const { page, host } = await watchRun(t, { appBadge: true });
+  const { page, host } = await watchRun(t, { tabStatus: true });
   page.hidden = true;
   await finish(page, host);
   assert.equal(page.badge, 1);
@@ -186,14 +186,14 @@ test('clears the app icon badge when switched off', async (t) => {
 });
 
 test('counts conversations waiting for confirmation that this tab never saw', async (t) => {
-  const { page, host } = await watchRun(t, { appBadge: true });
+  const { page, host } = await watchRun(t, { tabStatus: true });
   host.statuses[B] = 'waiting_for_confirmation';
   await page.wait(20_000);
   assert.equal(page.badge, 1);
 });
 
 test('remembers unseen runs across reloads and shares them between windows', async (t) => {
-  const { page, host } = await watchRun(t, { appBadge: true });
+  const { page, host } = await watchRun(t, { tabStatus: true });
   page.hidden = true;
   await finish(page, host);
   assert.equal(unseen(page), JSON.stringify([A]));

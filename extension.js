@@ -139,7 +139,8 @@ const SWITCHES = [
     key: 'tabStatus',
     status: 'count',
     label: 'Tab status',
-    description: "Show the agent's status in the browser tab's title and icon.",
+    description:
+      "Show the agent's status in the browser tab's title and icon, and how many conversations need your input on the installed app's icon.",
   },
   {
     key: 'notifications',
@@ -159,30 +160,16 @@ const SWITCHES = [
     enable: unlockAudio,
   },
   {
-    key: 'appBadge',
-    status: 'count',
-    label: 'App icon badge',
-    description:
-      "Show how many conversations need your input on the installed app's icon.",
-    check: appBadgeProblem,
-  },
-  {
     key: 'unreadMarkers',
     label: 'Unread markers',
     description:
       'Mark the conversations in the sidebar that changed since you last had them open.',
   },
   {
-    key: 'themeColor',
-    label: 'Title bar colour',
-    description:
-      "Match the installed app's title bar to Canvas's colour theme.",
-  },
-  {
     key: 'installableApp',
     label: 'Installable app',
     description:
-      'Let your browser install Canvas as an app, with its icon, and keep it clear of notches and home indicators.',
+      "Let your browser install Canvas as an app, with its icon and a title bar in Canvas's colours, clear of notches and home indicators.",
     check: installProblem,
   },
   {
@@ -220,8 +207,16 @@ function readJson(key, fallback) {
   }
 }
 
+// Switches since merged into others turn those on.
+const MERGED_SWITCHES = { appBadge: 'tabStatus', themeColor: 'installableApp' };
+
 function loadSettings() {
-  settings = { ...DEFAULT_SETTINGS, ...readJson(STORAGE_KEY, {}) };
+  const stored = { ...readJson(STORAGE_KEY, {}) };
+  for (const [old, key] of Object.entries(MERGED_SWITCHES)) {
+    if (stored[old]) stored[key] = true;
+    delete stored[old];
+  }
+  settings = { ...DEFAULT_SETTINGS, ...stored };
 }
 
 // Saves the settings, or with none, removes them, turning every feature off.
@@ -329,44 +324,6 @@ function canvasBackground() {
   return null;
 }
 
-// Installed apps colour their title bar from the theme-color meta, which
-// Canvas doesn't set. Follow its theme root's attributes, and the system
-// scheme for its "system" theme.
-function watchThemeColor() {
-  let root = null;
-  const scheme = window.matchMedia?.('(prefers-color-scheme: dark)');
-  const apply = () => {
-    const color = settings.themeColor && canvasBackground();
-    if (!color) {
-      removeElement(THEME_META_ID);
-      return;
-    }
-    const meta = headElement(THEME_META_ID, 'meta', { first: true });
-    meta.name = 'theme-color';
-    setProperty(meta, 'content', color);
-  };
-  const observer = new MutationObserver(apply);
-  const track = () => {
-    const next = settings.themeColor ? themeRoot() : null;
-    if (next === root) return;
-    root = next;
-    observer.disconnect();
-    if (root) observer.observe(root, { attributes: true });
-    apply();
-  };
-  scheme?.addEventListener?.('change', apply);
-  // Switching it on or off changes the root followed, which applies it.
-  return {
-    onDomChange: track,
-    refresh: track,
-    dispose() {
-      observer.disconnect();
-      scheme?.removeEventListener?.('change', apply);
-      removeElement(THEME_META_ID);
-    },
-  };
-}
-
 // Canvas links no web app manifest, so browsers won't offer to install it.
 // This links one of its own, as a data: URL, with absolute URLs under
 // Canvas's base path, as relative ones would resolve against the data: URL.
@@ -467,6 +424,12 @@ function installableApp(host) {
   let pngsFor = null;
   let viewport = null;
   let viewportContent = null;
+  // What the linked manifest was built from, as it's only built again when
+  // that changes, and the theme root followed for its colour.
+  let built = null;
+  let root = null;
+  const rootObserver = new MutationObserver(() => apply());
+  const scheme = window.matchMedia?.('(prefers-color-scheme: dark)');
 
   // Canvas's favicon as PNG icons, once per URL: null until they're drawn,
   // and none where the browser can't draw them.
@@ -503,7 +466,9 @@ function installableApp(host) {
   }
 
   function remove() {
+    built = null;
     removeElement(MANIFEST_ID);
+    removeElement(THEME_META_ID);
     removeElement(TOUCH_ICON_ID);
     removeElement(SAFE_AREA_STYLE_ID);
     for (const name of Object.keys(IOS_META)) removeElement(iosMetaId(name));
@@ -518,7 +483,37 @@ function installableApp(host) {
     const base = canvasBase();
     const svgUrl = new URL('favicon.svg', base).href;
     drawIcons(svgUrl);
-    const color = canvasBackground() ?? '#000';
+    // Installed apps colour their title bar from the theme-color meta, which
+    // Canvas doesn't set.
+    const background = canvasBackground();
+    if (background) {
+      const meta = headElement(THEME_META_ID, 'meta', { first: true });
+      meta.name = 'theme-color';
+      setProperty(meta, 'content', background);
+    } else {
+      removeElement(THEME_META_ID);
+    }
+    // Browsers may only read the first manifest linked, so it waits for the
+    // PNG icons that Android needs to install the app.
+    const color = background ?? '#000';
+    const key = `${base}|${color}|${svgUrl}`;
+    if (pngs && (key !== built || !document.getElementById(MANIFEST_ID))) {
+      built = key;
+      linkManifest(base, color, svgUrl);
+    }
+    const touch = headElement(TOUCH_ICON_ID, 'link', {
+      attributes: { rel: 'apple-touch-icon' },
+    });
+    setAttribute(touch, 'href', touchIcon ?? svgUrl);
+    for (const [name, content] of Object.entries(IOS_META)) {
+      headElement(iosMetaId(name), 'meta', { attributes: { name, content } });
+    }
+    setStyle(SAFE_AREA_STYLE_ID, SAFE_AREA_CSS);
+    setViewport(true);
+    handleLaunches(base);
+  }
+
+  function linkManifest(base, color, svgUrl) {
     const manifest = {
       id: base,
       name: APP_NAME,
@@ -543,25 +538,22 @@ function installableApp(host) {
         { src: svgUrl, sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
       ],
     };
-    // Browsers may only read the first manifest linked, so it waits for the
-    // PNG icons that Android needs to install the app.
-    if (pngs) {
-      const href = `data:application/manifest+json,${encodeURIComponent(JSON.stringify(manifest))}`;
-      const link = headElement(MANIFEST_ID, 'link', {
-        attributes: { rel: 'manifest', href },
-      });
-      setAttribute(link, 'href', href);
-    }
-    const touch = headElement(TOUCH_ICON_ID, 'link', {
-      attributes: { rel: 'apple-touch-icon' },
+    const href = `data:application/manifest+json,${encodeURIComponent(JSON.stringify(manifest))}`;
+    const link = headElement(MANIFEST_ID, 'link', {
+      attributes: { rel: 'manifest', href },
     });
-    setAttribute(touch, 'href', touchIcon ?? svgUrl);
-    for (const [name, content] of Object.entries(IOS_META)) {
-      headElement(iosMetaId(name), 'meta', { attributes: { name, content } });
-    }
-    setStyle(SAFE_AREA_STYLE_ID, SAFE_AREA_CSS);
-    setViewport(true);
-    handleLaunches(base);
+    setAttribute(link, 'href', href);
+  }
+
+  // The colours follow the theme root's attributes, and the system scheme
+  // for Canvas's "system" theme; Canvas may re-mount the root.
+  function track() {
+    const next = settings.installableApp ? themeRoot() : null;
+    if (next === root) return;
+    root = next;
+    rootObserver.disconnect();
+    if (root) rootObserver.observe(root, { attributes: true });
+    apply();
   }
 
   // Launches go to their URL inside Canvas, as host.navigate() does, from
@@ -588,11 +580,16 @@ function installableApp(host) {
     }
   }
 
-  // Canvas's theme can change the manifest's colours.
+  scheme?.addEventListener?.('change', apply);
   return {
-    refresh: apply,
-    onDomChange: apply,
+    refresh() {
+      track();
+      apply();
+    },
+    onDomChange: track,
     dispose() {
+      rootObserver.disconnect();
+      scheme?.removeEventListener?.('change', apply);
       remove();
       if (launches) window.launchQueue?.setConsumer(() => {});
     },
@@ -851,12 +848,6 @@ function watchQuietActivity(statusOf) {
       active = false;
     },
   };
-}
-
-function appBadgeProblem() {
-  return window.navigator.setAppBadge
-    ? null
-    : "Your browser doesn't support app icon badges.";
 }
 
 // Browsers only let audio start after a click on the page, so the context is
@@ -1440,7 +1431,7 @@ function watchAgentStatus(host, loadConversations, checks, onRender) {
         (tabCount ? STATUS_BADGES.waiting_for_confirmation.color : null),
       tabCount,
     );
-    appBadge(settings.appBadge ? count : 0);
+    appBadge(count);
     if (!disposed) onRender();
   }
 
@@ -1828,7 +1819,6 @@ export function activate(host) {
     watchResponsiveTables(),
     agentStatus,
     watchUnread(loadConversations, checks),
-    watchThemeColor(),
     installableApp(host),
     quietActivity,
   ];

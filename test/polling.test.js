@@ -27,7 +27,7 @@ test('stops polling once nothing is running', async (t) => {
 });
 
 test('refreshes the waiting count every 20 seconds while counting', async (t) => {
-  const { page, host } = await openA(t, { appBadge: true }, 'idle');
+  const { page, host } = await openA(t, { tabStatus: true }, 'idle');
   assert.equal(counts(host).length, 1);
 
   await page.wait(20_000);
@@ -63,7 +63,7 @@ test('does not check at all while no status switch is on', async (t) => {
 test('only checks at once for switches that need statuses', async (t) => {
   const { page, host } = await openA(t, { notifications: true }, 'idle');
   await page.changeSettings({ notifications: true, wideCanvas: true });
-  await page.changeSettings({ notifications: true, wideCanvas: true, themeColor: true });
+  await page.changeSettings({ notifications: true, wideCanvas: true, responsiveTables: true });
   assert.equal(host.requests.length, 1);
 
   await page.changeSettings({ notifications: true, wideCanvas: true, tabStatus: true });
@@ -90,7 +90,7 @@ test('fetches statuses and the waiting count together while a run is going', asy
 });
 
 test('fetches the count at once when a run it follows starts waiting', async (t) => {
-  const { page, host } = await openA(t, { appBadge: true }, 'running');
+  const { page, host } = await openA(t, { tabStatus: true }, 'running');
   host.statuses[A] = 'waiting_for_confirmation';
   await page.check();
   assert.equal(counts(host).length, 2);
