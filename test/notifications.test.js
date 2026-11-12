@@ -188,10 +188,7 @@ test('clears the app icon badge when switched off', async (t) => {
 test('counts conversations waiting for confirmation that this tab never saw', async (t) => {
   const { page, host } = await watchRun(t, { appBadge: true });
   host.statuses[B] = 'waiting_for_confirmation';
-  await page.check();
-  assert.equal(page.badge, 0, 'not before the count is due again');
-
-  await page.wait(30_000);
+  await page.wait(20_000);
   assert.equal(page.badge, 1);
 });
 

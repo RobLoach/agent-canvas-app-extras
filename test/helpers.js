@@ -5,8 +5,8 @@ export const A = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 export const B = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
 export const COUNT_PATH =
   '/api/conversations/count?status=waiting_for_confirmation';
-// The app checks statuses at most this often, as its STATUS_MIN_GAP_MS.
-const CHECK_GAP_MS = 3000;
+// The app checks statuses at most this often, as its CHECK_MS.
+const CHECK_GAP_MS = 20000;
 
 let loads = 0;
 

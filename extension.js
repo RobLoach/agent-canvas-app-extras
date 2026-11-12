@@ -69,20 +69,20 @@ const RESPONSIVE_TABLES_CSS = `
   border-top: 1px solid color-mix(in srgb, currentColor 20%, transparent);
 }`;
 
-// Status checks run at most this often, plus a poll while a run is going.
-const STATUS_MIN_GAP_MS = 3000;
-const STATUS_POLL_MS = 15000;
-// How often the count of conversations waiting for confirmation is fetched,
-// for runs started elsewhere, which don't touch this page: it's fetched at
-// once when a run this tab follows starts or stops waiting.
-const COUNT_POLL_MS = 30000;
-// How often the sidebar's conversations are checked for changes.
-const UNREAD_POLL_MS = 30000;
+// Status and unread checks run together, sharing one request, at most this
+// often, and poll this often while a run is going, while counting the
+// conversations waiting for confirmation, and for the sidebar's changes.
+const CHECK_MS = 20000;
 const WAITING_COUNT_PATH =
   '/api/conversations/count?status=waiting_for_confirmation';
 const CONVERSATION_PATH = /\/conversations\/([0-9a-f-]{32,36})(?:\/|$)/i;
-const openConversationId = () =>
-  location.pathname.match(CONVERSATION_PATH)?.[1] ?? null;
+// The Agent Server's ids drop the dashes Canvas's links may have, so ids are
+// kept that way, one per conversation.
+const conversationKey = (id) => id.replaceAll('-', '').toLowerCase();
+const openConversationId = () => {
+  const id = location.pathname.match(CONVERSATION_PATH)?.[1];
+  return id ? conversationKey(id) : null;
+};
 // A browser window behind another app often still counts as visible.
 const away = () => document.hidden || !document.hasFocus();
 // Canvas starts the open conversation's title with its own status emoji,
@@ -1270,9 +1270,6 @@ const unseenRuns = {
   },
 };
 
-// The Agent Server's ids drop the dashes Canvas's links have.
-const conversationKey = (id) => id.replaceAll('-', '').toLowerCase();
-
 // Conversations from the Agent Server, by id, with every load asked for at
 // the same moment, e.g. by the agent status and unread markers on the same
 // page change, sharing one request. Missing conversations are null.
@@ -1301,17 +1298,20 @@ function conversationLoader(host) {
 }
 
 // Run task at most once per gap, folding the calls in between into one run at
-// the end of it, and never two at once: a call during a run queues another.
+// the end of it, and never two at once: a call during a run queues another,
+// which now() runs as soon as the first is done.
 function throttle(task, gap) {
   let last = 0;
   let trailing = 0;
   let running = false;
+  // false, true, or 'now' to skip the gap.
   let again = false;
+  let soon = false;
 
   async function run() {
     last = Date.now();
     if (running) {
-      again = true;
+      again ||= true;
       return;
     }
     running = true;
@@ -1323,6 +1323,7 @@ function throttle(task, gap) {
       running = false;
     }
     if (again) {
+      if (again === 'now') last = 0;
       again = false;
       request();
     }
@@ -1344,11 +1345,19 @@ function throttle(task, gap) {
     request,
     // Run without waiting out the gap, e.g. as settings change, instead of
     // the run that was waiting for it.
+    // Calls at the same moment, e.g. from every feature as settings change,
+    // make one run.
     now() {
       clearTimeout(trailing);
       trailing = 0;
       last = 0;
-      request();
+      if (soon) return;
+      soon = true;
+      queueMicrotask(() => {
+        soon = false;
+        if (running) again = 'now';
+        else request();
+      });
     },
     cancel() {
       clearTimeout(trailing);
@@ -1362,12 +1371,11 @@ function throttle(task, gap) {
 // a run ends or needs you while you're away from it. Canvas re-renders the
 // chat as events stream in, background tabs included, so DOM changes trigger
 // checks; onRender runs after every change in what's known.
-function watchAgentStatus(host, loadConversations, onRender) {
+function watchAgentStatus(host, loadConversations, checks, onRender) {
   const conversations = new Map();
   const favicon = faviconBadge();
   const title = tabTitle();
   const appBadge = appIconBadge();
-  const checks = throttle(check, STATUS_MIN_GAP_MS);
   let openId = null;
   // Conversations waiting for confirmation anywhere, from the Agent Server,
   // and when that was last fetched.
@@ -1514,7 +1522,7 @@ function watchAgentStatus(host, loadConversations, onRender) {
     const ids = [...conversations.keys(), ...unseen];
     if (ids.length || counting()) {
       try {
-        const countDue = counting() && Date.now() - countedAt >= COUNT_POLL_MS;
+        const countDue = counting() && Date.now() - countedAt >= CHECK_MS;
         const [infos, count] = await Promise.all([
           ids.length ? loadConversations(ids) : [],
           countDue ? fetchCount() : counting() ? waiting : 0,
@@ -1543,17 +1551,16 @@ function watchAgentStatus(host, loadConversations, onRender) {
     schedulePoll();
   }
 
-  // Poll every STATUS_POLL_MS while a run is going: runs you navigated away
-  // from don't re-render this page, and a run's last event can land between
-  // checks. Poll less often while counting, for runs started elsewhere.
-  // Otherwise, page changes and coming back to the tab trigger checks.
+  // Poll while a run is going: runs you navigated away from don't re-render
+  // this page, and a run's last event can land between checks. Poll while
+  // counting too, for runs started elsewhere. Otherwise, page changes and
+  // coming back to the tab trigger checks.
   function schedulePoll() {
     clearTimeout(poll);
     const running = [...conversations.values()].some((entry) =>
       ACTIVE_STATUSES.has(entry.status),
     );
-    const wait = running ? STATUS_POLL_MS : counting() ? COUNT_POLL_MS : 0;
-    poll = wait ? setTimeout(checks.request, wait) : 0;
+    poll = running || counting() ? setTimeout(checks.request, CHECK_MS) : 0;
   }
 
   // Coming back to the tab or window clears the finished/error/paused badges.
@@ -1584,6 +1591,7 @@ function watchAgentStatus(host, loadConversations, onRender) {
   window.addEventListener('focus', onReturn);
 
   return {
+    check,
     statusOf: (id) => conversations.get(id)?.status ?? null,
     onDomChange() {
       if (watching()) checks.request();
@@ -1650,15 +1658,14 @@ const readState = {
 
 // Mark the conversations in the sidebar that changed since you last had them
 // open, with a dot after their title. Their update times come from the Agent
-// Server, checked as the page changes and every UNREAD_POLL_MS, except while
+// Server, checked as the page changes and every CHECK_MS, except while
 // the tab is hidden, when nobody sees the sidebar: it's checked on return.
-function watchUnread(loadConversations) {
+function watchUnread(loadConversations, checks) {
   // Each sidebar conversation's last update, by key, in ms.
   const updated = new Map();
   // Each card's link, and the conversation it's for, read again only if the
   // link changes.
   const cardKeys = new WeakMap();
-  const checks = throttle(check, STATUS_MIN_GAP_MS);
   // What you've read, as stored, loaded again when another window changes it.
   let state = null;
   let poll = 0;
@@ -1739,7 +1746,7 @@ function watchUnread(loadConversations) {
       render();
     }
     clearTimeout(poll);
-    poll = setTimeout(checks.request, UNREAD_POLL_MS);
+    poll = setTimeout(checks.request, CHECK_MS);
   }
 
   function onVisibility() {
@@ -1751,6 +1758,7 @@ function watchUnread(loadConversations) {
   window.addEventListener('focus', render);
 
   return {
+    check,
     refresh() {
       const on = settings.unreadMarkers && !disposed;
       if (on === active) return;
@@ -1760,7 +1768,6 @@ function watchUnread(loadConversations) {
         checks.now();
         return;
       }
-      checks.cancel();
       clearTimeout(poll);
       readState.clear();
       state = null;
@@ -1798,9 +1805,15 @@ export function activate(host) {
   loadSettings();
   let disposed = false;
   // Hiding "Running" and "Reading" pulses on the open conversation's status.
+  // The status and unread checks run together, so their loads share one
+  // request.
   const loadConversations = conversationLoader(host);
+  const checks = throttle(
+    () => Promise.allSettled(features.map((feature) => feature.check?.())),
+    CHECK_MS,
+  );
   const quietActivity = watchQuietActivity((id) => agentStatus.statusOf(id));
-  const agentStatus = watchAgentStatus(host, loadConversations, () =>
+  const agentStatus = watchAgentStatus(host, loadConversations, checks, () =>
     quietActivity.onStatus(),
   );
   const features = [
@@ -1814,7 +1827,7 @@ export function activate(host) {
     wideCanvas(),
     watchResponsiveTables(),
     agentStatus,
-    watchUnread(loadConversations),
+    watchUnread(loadConversations, checks),
     watchThemeColor(),
     installableApp(host),
     quietActivity,

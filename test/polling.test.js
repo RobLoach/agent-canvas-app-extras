@@ -8,29 +8,29 @@ const counts = (host) => host.requests.filter((path) => path === COUNT_PATH);
 const openA = (t, settings, status) =>
   start(t, { path: `/conversations/${A}`, settings, statuses: { [A]: status } });
 
-test('polls every 15 seconds while a run is going', async (t) => {
+test('polls every 20 seconds while a run is going', async (t) => {
   const { page, host } = await openA(t, { tabStatus: true }, 'running');
   assert.equal(statusChecks(host).length, 1);
 
-  await page.wait(15_000);
+  await page.wait(20_000);
   assert.equal(statusChecks(host).length, 2);
 });
 
 test('stops polling once nothing is running', async (t) => {
   const { page, host } = await openA(t, { notifications: true }, 'running');
   host.statuses[A] = 'finished';
-  await page.wait(15_000);
+  await page.wait(20_000);
   const requests = host.requests.length;
 
   await page.wait(60 * 60 * 1000);
   assert.equal(host.requests.length, requests);
 });
 
-test('refreshes the waiting count every 30 seconds while counting', async (t) => {
+test('refreshes the waiting count every 20 seconds while counting', async (t) => {
   const { page, host } = await openA(t, { appBadge: true }, 'idle');
   assert.equal(counts(host).length, 1);
 
-  await page.wait(30_000);
+  await page.wait(20_000);
   assert.equal(counts(host).length, 2);
 });
 
@@ -41,14 +41,14 @@ test('does not poll an idle conversation', async (t) => {
   assert.equal(host.requests.length, 1);
 });
 
-test('checks at most every 3 seconds, catching up after the gap', async (t) => {
+test('checks at most every 20 seconds, catching up after the gap', async (t) => {
   const { page, host } = await openA(t, { notifications: true }, 'idle');
   page.mutate();
   page.mutate();
-  await page.wait(1000);
+  await page.wait(10_000);
   assert.equal(host.requests.length, 1);
 
-  await page.wait(2000);
+  await page.wait(10_000);
   assert.equal(host.requests.length, 2, 'one check for both changes');
 });
 
@@ -78,15 +78,15 @@ test('a status switch turned on while a check waits out the gap checks once', as
   await page.changeSettings({ notifications: true, tabStatus: true });
   assert.equal(statusChecks(host).length, 2);
 
-  await page.wait(5000);
-  assert.equal(statusChecks(host).length, 2, 'not again when the gap is up');
+  await page.wait(19_000);
+  assert.equal(statusChecks(host).length, 2, 'not again when the gap is up, before the next poll');
 });
 
-test('fetches the waiting count every 30 seconds even while a run is going', async (t) => {
+test('fetches statuses and the waiting count together while a run is going', async (t) => {
   const { page, host } = await openA(t, { tabStatus: true }, 'running');
-  for (let quarter = 0; quarter < 4; quarter++) await page.wait(15_000);
-  assert.equal(statusChecks(host).length, 5, 'statuses every 15 seconds');
-  assert.equal(counts(host).length, 3, 'the count every 30');
+  for (let check = 0; check < 3; check++) await page.wait(20_000);
+  assert.equal(statusChecks(host).length, 4, 'statuses every 20 seconds');
+  assert.equal(counts(host).length, 4, 'the count with them');
 });
 
 test('fetches the count at once when a run it follows starts waiting', async (t) => {
