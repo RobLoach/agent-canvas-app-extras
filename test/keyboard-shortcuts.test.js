@@ -60,7 +60,8 @@ test('Alt+↑ and Alt+↓ open the previous and next conversation', async (t) =>
   press(page, 'ArrowUp', { altKey: true });
   press(page, 'ArrowDown', { altKey: true });
 
-  assert.deepEqual(host.navigations, [`/conversations/${A}`]);
+  // By the sidebar's own link, which carries the backend.
+  assert.deepEqual(host.navigations, [`/conversations/${A}?backend=local`]);
 });
 
 test('Alt+N starts a new chat, on any keyboard layout', async (t) => {
@@ -91,4 +92,36 @@ test('closes the list when switched off', async (t) => {
   assert.equal(help(page), null);
   press(page, '?');
   assert.equal(help(page), null);
+});
+
+test("leaves keys to Canvas's own dialogs, and to fields like the settings switches", async (t) => {
+  const { page, host } = await start(t, {
+    body: `${BODY}<input type="checkbox" role="switch">`,
+    settings: ON,
+  });
+  press(page, '?', {}, page.document.querySelector('[role="switch"]'));
+  assert.ok(help(page), 'a switch is no text field');
+  press(page, 'Escape');
+
+  page.document.body.insertAdjacentHTML('beforeend', '<div role="dialog" aria-modal="true"></div>');
+  press(page, '?');
+  press(page, 'ArrowDown', { altKey: true });
+  assert.equal(help(page), null);
+  assert.deepEqual(host.navigations, []);
+});
+
+test('the list keeps keys from Canvas while open, without blocking the browser', async (t) => {
+  const { page } = await start(t, { body: BODY, settings: ON });
+  const heard = [];
+  page.window.document.addEventListener('keydown', (event) => heard.push(event.key));
+  press(page, '?');
+
+  const find = press(page, 'f', { ctrlKey: true }, page.document.activeElement);
+  assert.equal(find.defaultPrevented, false);
+  assert.deepEqual(heard, ['?'], 'only the key that opened it');
+});
+
+test('/ is left to the browser where there is no message box', async (t) => {
+  const { page } = await start(t, { body: '', settings: ON });
+  assert.equal(press(page, '/').defaultPrevented, false);
 });

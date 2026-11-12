@@ -270,3 +270,34 @@ test('turns on the switches that merged ones moved into', async (t) => {
   assert.equal(saved.installableApp, true);
   assert.equal('appBadge' in saved || 'themeColor' in saved, false);
 });
+
+test('keeps redrawing after Canvas cleans up an earlier mount late', async (t) => {
+  const page = setupPage(t, { url: SETTINGS_URL });
+  const host = fakeHost();
+  await activateExtension(page, host);
+  const mount = () => {
+    const container = page.document.createElement('div');
+    page.document.body.append(container);
+    return host.pages.get('settings')({ container, path: '', navigate: host.navigate });
+  };
+  const first = mount();
+  mount();
+  first();
+
+  await page.changeSettings({ wideCanvas: true });
+  assert.equal(switchFor(page, 'wideCanvas').checked, true);
+});
+
+test('shows the keyboard shortcuts, and links back to Customize on small screens', async (t) => {
+  const page = setupPage(t, { url: SETTINGS_URL });
+  const host = fakeHost();
+  await openSettings(page, host);
+
+  page.document.querySelector('[data-testid="extras-show-shortcuts"]').click();
+  assert.ok(page.document.getElementById('openhands-extras-shortcuts'));
+
+  const back = [...page.document.querySelectorAll('a')].find((a) => a.textContent === '← Customize');
+  assert.ok(back.classList.contains('lg:hidden'));
+  back.click();
+  assert.deepEqual(host.navigations, ['/apps']);
+});

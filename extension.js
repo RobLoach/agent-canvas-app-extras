@@ -56,17 +56,21 @@ const THINKING_KEY = 'THINKING$TITLE';
 const WIDE_CANVAS_CSS =
   '[data-agent-server-ui] .max-w-200.h-full.min-h-0 { max-width: none; }';
 
-// Canvas's dialogs (ModalBackdrop) centre fixed-width content with no height
-// limit, so on a phone a tall or wide one runs off the screen, out of reach.
-// The Automate pages' tab strip (ManifestSubpageLayout) gives its links
-// equal widths that cut their names off, though it can scroll.
+// Canvas's dialogs (ModalBackdrop: a fixed backdrop, then the content)
+// centre fixed-width content with no height limit, so on a phone a tall or
+// wide one runs off the screen, out of reach. The Automate pages' tab strip
+// (ManifestSubpageLayout) gives its links equal widths that cut their names
+// off, though it can scroll.
+const MODAL_FRAME = '[role="dialog"][aria-modal="true"].fixed.inset-0 > .fixed.inset-0 + .relative';
 const MOBILE_FIXES_CSS = `
-[role="dialog"][aria-modal="true"].fixed.inset-0 > .relative {
-  box-sizing: border-box; max-width: 100vw; max-height: 100dvh;
-  overflow-y: auto; padding: 0.75rem;
-}
-[role="dialog"][aria-modal="true"].fixed.inset-0 > .relative > * { max-width: 100%; }
-[data-testid$="-navbar-mobile"] > a { flex: none; width: auto; }`;
+@media (max-width: 767px) {
+  ${MODAL_FRAME} {
+    box-sizing: border-box; max-width: 100vw; max-height: 100dvh;
+    overflow-y: auto; padding: 0.75rem;
+  }
+  ${MODAL_FRAME} > * { max-width: 100%; }
+  [data-testid$="-navbar-mobile"] > a { flex: none; width: auto; }
+}`;
 
 // Canvas's Markdown tables, each in a scroller that lets it run wider than
 // the chat. Basic Table marks a table it stacks with .bt, and each cell with
@@ -1104,7 +1108,7 @@ function navLink(host, path, label, icon, active) {
 // Hide the settings page's sidebar link always, and the usage page's while
 // it's off.
 function sidebarLinks(name) {
-  const link = (page) => `[data-testid^="sidebar-canvas-extension-${name}-${page}"]`;
+  const link = (page) => `[data-testid="sidebar-canvas-extension-${name}-${page}"]`;
   const apply = () => {
     const hidden = [link(SETTINGS_PAGE), ...(settings.usagePage ? [] : [link(USAGE_PAGE)])];
     setStyle(SIDEBAR_STYLE_ID, `${hidden.join(', ')} { display: none !important; }`);
@@ -1189,6 +1193,16 @@ function settingsPage(host, onChange) {
           buildSwitch(item, onChange),
         ),
       );
+      if (group === 'Chat') {
+        const show = document.createElement('button');
+        show.type = 'button';
+        show.dataset.testid = 'extras-show-shortcuts';
+        show.className =
+          'w-fit cursor-pointer rounded-sm text-sm text-link hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus';
+        show.textContent = 'Show keyboard shortcuts';
+        show.addEventListener('click', () => showShortcuts?.());
+        section.append(show);
+      }
       return section;
     });
     const reset = document.createElement('button');
@@ -1210,13 +1224,14 @@ function settingsPage(host, onChange) {
     root.setAttribute(OWN_ATTR, '');
     root.className = 'flex min-h-full gap-4 md:gap-6 md:pl-8 lg:gap-10 lg:pl-10';
     root.innerHTML = `
-      <aside class="hidden lg:flex lg:w-65 lg:shrink-0 lg:flex-col lg:gap-2 lg:sticky lg:top-0 lg:self-start">
+      <aside class="hidden lg:flex lg:w-65 lg:shrink-0 lg:flex-col lg:gap-2 lg:sticky lg:top-8 lg:self-start">
         <span class="px-2 text-sm font-normal text-contrast">Customize</span>
         <div class="flex flex-col gap-0.5 pt-0.5"></div>
       </aside>
       <div class="flex min-w-0 flex-1 flex-col px-4 pt-8 pb-12 lg:px-0 lg:pr-3.5">
         <div class="mx-auto flex w-full min-w-0 max-w-200 flex-col gap-6">
           <div class="min-w-0 space-y-1">
+            <span class="lg:hidden" data-extras-back></span>
             <h2 class="text-xl font-semibold leading-6 text-foreground">Extras</h2>
             <p class="max-w-2xl text-sm text-tertiary-light">Agent status in your tab and app icon, notifications, unread markers, a quieter chat and more. Settings are kept in this browser.</p>
           </div>
@@ -1227,11 +1242,18 @@ function settingsPage(host, onChange) {
       ...CUSTOMIZE_ITEMS.map(([path, label, icon]) => navLink(host, path, label, icon, false)),
       navLink(host, pageHref(name, SETTINGS_PAGE), 'Extras', NAV_ICONS.extras, true),
     );
-    list = root.querySelector('.gap-8');
+    // Customize's menu only shows on wide screens, as in Canvas.
+    const back = canvasLink(host, '/apps', 'text-sm text-link hover:underline');
+    back.textContent = '← Customize';
+    root.querySelector('[data-extras-back]').replaceWith(back);
+    back.classList.add('lg:hidden');
+    const own = root.querySelector('.gap-8');
+    list = own;
     render();
     container.append(root);
+    // Canvas may clean up a mount after the next one has started.
     return () => {
-      list = null;
+      if (list === own) list = null;
       root.remove();
     };
   }
@@ -2059,7 +2081,16 @@ const HELP_ID = 'openhands-extras-shortcuts';
 const COMPOSER = '[data-testid="chat-input"]';
 const isApple = () => /Mac|iPhone|iPad/.test(window.navigator.platform ?? '');
 const typing = (target) =>
-  !!target?.closest?.('input, textarea, select, [contenteditable]:not([contenteditable="false"])');
+  !!target?.closest?.(
+    'input:not([type="checkbox"]):not([type="radio"]):not([type="button"]), textarea, select, [contenteditable]:not([contenteditable="false"])',
+  );
+// One of Canvas's own dialogs, which keeps keys to itself.
+const canvasDialogOpen = () =>
+  [...document.querySelectorAll('[aria-modal="true"]')].some(
+    (dialog) => !dialog.closest(`#${HELP_ID}`),
+  );
+// Opens the list of shortcuts, while Keyboard shortcuts runs.
+let showShortcuts = null;
 
 function shortcutList() {
   const mod = isApple() ? '⌘' : 'Ctrl';
@@ -2131,17 +2162,20 @@ function keyboardShortcuts(host) {
     selection?.addRange(range);
   }
 
-  // The sidebar's conversations, in order, from the open one.
+  // The sidebar's conversations, in order, from the open one, by their own
+  // links, which carry Canvas's backend.
   function openNeighbour(step) {
-    const keys = [...document.querySelectorAll('[data-testid="conversation-card"]')]
+    const basePath = new URL(canvasBase()).pathname;
+    const links = [...document.querySelectorAll('[data-testid="conversation-card"]')]
       .map((card) => card.closest('a[href]')?.getAttribute('href'))
-      .map((href) => href && new URL(href, location.href).pathname.match(CONVERSATION_PATH)?.[1])
       .filter(Boolean)
-      .map(conversationKey);
-    if (!keys.length) return;
+      .map((href) => new URL(href, location.href))
+      .filter((url) => CONVERSATION_PATH.test(url.pathname));
+    if (!links.length) return;
+    const keys = links.map((url) => conversationKey(url.pathname.match(CONVERSATION_PATH)[1]));
     const index = keys.indexOf(openConversationId());
-    const next = index === -1 ? (step > 0 ? 0 : keys.length - 1) : index + step;
-    if (keys[next]) host.navigate(`/conversations/${keys[next]}`);
+    const next = links[index === -1 ? (step > 0 ? 0 : links.length - 1) : index + step];
+    if (next) host.navigate(`/${(next.pathname + next.search).slice(basePath.length)}`);
   }
 
   function actionFor(event) {
@@ -2153,34 +2187,38 @@ function keyboardShortcuts(host) {
       if (event.code === 'KeyN') return () => host.navigate('/conversations');
       return null;
     }
-    if (event.key === '?') return () => (help() ? closeHelp() : openHelp());
-    if (event.key === '/') return focusComposer;
+    if (event.key === '?') return openHelp;
+    if (event.key === '/' && document.querySelector(COMPOSER)) return focusComposer;
     return null;
   }
 
+  // Keys are heard before Canvas's own handlers, so the list, which is modal,
+  // can keep them from Canvas while it's open.
   function onKeyDown(event) {
-    if (!settings.keyboardShortcuts || event.defaultPrevented || event.isComposing) return;
     if (help()) {
-      // The list is modal: keys stay on its close button.
+      event.stopPropagation();
+      if (['Escape', '?', 'Tab'].includes(event.key)) event.preventDefault();
       if (event.key === 'Escape' || event.key === '?') closeHelp();
-      if (event.key === 'Tab') help().querySelector('button').focus();
-      if (event.key !== 'Enter' && event.key !== ' ') event.preventDefault();
+      else if (event.key === 'Tab') help().querySelector('button').focus();
       return;
     }
-    if (typing(event.target)) return;
+    if (!settings.keyboardShortcuts || event.defaultPrevented || event.isComposing) return;
+    if (typing(event.target) || canvasDialogOpen()) return;
     const action = actionFor(event);
     if (!action) return;
     event.preventDefault();
     action();
   }
 
-  window.addEventListener('keydown', onKeyDown);
+  window.addEventListener('keydown', onKeyDown, true);
+  showShortcuts = openHelp;
   return {
     refresh() {
       if (!settings.keyboardShortcuts) closeHelp();
     },
     dispose() {
-      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keydown', onKeyDown, true);
+      if (showShortcuts === openHelp) showShortcuts = null;
       closeHelp();
     },
   };
@@ -2215,10 +2253,13 @@ const sumTokens = (usage) =>
     .map((key) => Number(usage?.[key]) || 0)
     .reduce((sum, count) => sum + count, 0);
 
-// A conversation's dated costs, by model, and its tokens.
+// A conversation's costs, by model, each with its time, or null where the
+// server has only a total, and its tokens.
 function conversationUsage(info) {
-  const runModel =
-    info.current_model_name || info.current_model_id || info.agent?.acp_model || 'ACP agent';
+  const acp = info.agent?.kind === 'ACPAgent';
+  const runModel = acp
+    ? info.current_model_name || info.current_model_id || info.agent?.acp_model || 'ACP agent'
+    : info.agent?.llm?.model || 'Unknown model';
   const costs = [];
   let tokens = 0;
   for (const metrics of Object.values(info.stats?.usage_to_metrics ?? {})) {
@@ -2227,20 +2268,14 @@ function conversationUsage(info) {
     tokens += sumTokens(metrics?.accumulated_token_usage);
     const dated = Array.isArray(metrics?.costs) ? metrics.costs : [];
     for (const { cost, timestamp } of dated) {
-      costs.push({ model, cost: Number(cost) || 0, at: Number(timestamp) * 1000 });
+      const at = Number(timestamp) * 1000;
+      costs.push({ model, cost: Number(cost) || 0, at: Number.isFinite(at) ? at : null });
     }
-    // Without dated costs, the total counts from the last update.
     if (!dated.length && metrics?.accumulated_cost) {
-      costs.push({ model, cost: Number(metrics.accumulated_cost), at: Date.parse(info.updated_at) });
+      costs.push({ model, cost: Number(metrics.accumulated_cost) || 0, at: null });
     }
   }
-  return {
-    id: info.id,
-    title: info.title || 'Untitled',
-    acp: info.agent?.kind === 'ACPAgent',
-    tokens,
-    costs,
-  };
+  return { id: info.id, title: info.title || 'Untitled', acp, tokens, costs };
 }
 
 async function loadUsage(host) {
@@ -2260,14 +2295,17 @@ async function loadUsage(host) {
   return { conversations, more: !!pageId };
 }
 
+// Undated costs only count for all time, and are totalled apart otherwise.
 function summarizeUsage(conversations, since) {
   const models = new Map();
   const rows = [];
   let total = 0;
+  let undated = 0;
   for (const conversation of conversations) {
     let cost = 0;
     for (const entry of conversation.costs) {
-      if (!(entry.at >= since)) continue;
+      if (since !== -Infinity && entry.at === null) undated += entry.cost;
+      if (since !== -Infinity && !(entry.at >= since)) continue;
       cost += entry.cost;
       models.set(entry.model, (models.get(entry.model) ?? 0) + entry.cost);
     }
@@ -2275,7 +2313,7 @@ function summarizeUsage(conversations, since) {
     total += cost;
   }
   rows.sort((a, b) => b.cost - a.cost);
-  return { total, rows, models: [...models].sort((a, b) => b[1] - a[1]) };
+  return { total, undated, rows, models: [...models].sort((a, b) => b[1] - a[1]) };
 }
 
 function usagePage(host) {
@@ -2285,6 +2323,9 @@ function usagePage(host) {
     let disposed = false;
     let data = null;
     let error = null;
+    // Only the latest load, e.g. after Refresh, is shown.
+    let loads = 0;
+    let loadedAt = null;
     const language = canvasLanguage();
     const money = new Intl.NumberFormat(language, { style: 'currency', currency: 'USD' });
     const count = new Intl.NumberFormat(language, { notation: 'compact', maximumFractionDigits: 1 });
@@ -2292,7 +2333,7 @@ function usagePage(host) {
 
     const root = document.createElement('div');
     root.setAttribute(OWN_ATTR, '');
-    root.className = 'px-4 pt-8 pb-12 md:px-8';
+    root.className = 'px-4 pt-8 pb-12';
     root.innerHTML = `
       <div class="mx-auto flex w-full min-w-0 max-w-200 flex-col gap-6">
         <div class="flex min-w-0 items-start justify-between gap-4">
@@ -2303,10 +2344,28 @@ function usagePage(host) {
           <button type="button" data-testid="extras-usage-refresh" class="shrink-0 cursor-pointer rounded-md border border-border px-3 py-1.5 text-sm text-contrast hover:bg-surface-raised focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">Refresh</button>
         </div>
         <div role="group" aria-label="Period" class="flex flex-wrap gap-2"></div>
-        <div aria-live="polite" class="flex min-w-0 flex-col gap-6"></div>
+        <p role="status" class="sr-only"></p>
+        <div class="flex min-w-0 flex-col gap-6"></div>
       </div>`;
     const periods = root.querySelector('[role="group"]');
-    const body = root.querySelector('[aria-live]');
+    const status = root.querySelector('[role="status"]');
+    const body = status.nextElementSibling;
+    const refresh = root.querySelector('[data-testid="extras-usage-refresh"]');
+    const periodLabel = () => USAGE_PERIODS.find(([value]) => value === period)[1];
+    // The period buttons stay, so focus stays on the one chosen.
+    periods.append(
+      ...USAGE_PERIODS.map(([value, label]) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.dataset.period = value;
+        button.textContent = label;
+        button.addEventListener('click', () => {
+          period = value;
+          render();
+        });
+        return button;
+      }),
+    );
 
     function table(headings, rows) {
       const element = document.createElement('table');
@@ -2349,21 +2408,14 @@ function usagePage(host) {
     }
 
     function render() {
-      periods.replaceChildren(
-        ...USAGE_PERIODS.map(([value, label]) => {
-          const button = document.createElement('button');
-          button.type = 'button';
-          button.dataset.period = value;
-          button.setAttribute('aria-pressed', String(value === period));
-          button.className = `cursor-pointer rounded-full border px-3 py-1 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus ${value === period ? 'border-contrast bg-contrast text-base-secondary' : 'border-border text-muted hover:text-contrast'}`;
-          button.textContent = label;
-          button.addEventListener('click', () => {
-            period = value;
-            render();
-          });
-          return button;
-        }),
-      );
+      for (const button of periods.children) {
+        const on = button.dataset.period === period;
+        button.setAttribute('aria-pressed', String(on));
+        button.className = `cursor-pointer rounded-full border px-3 py-1 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus ${on ? 'border-contrast bg-contrast text-contrast-foreground' : 'border-border text-muted hover:text-contrast'}`;
+      }
+      const loading = settings.usagePage && !data && !error;
+      refresh.disabled = loading;
+      body.setAttribute('aria-busy', String(loading));
       if (!settings.usagePage) {
         const link = canvasLink(
           host,
@@ -2377,16 +2429,24 @@ function usagePage(host) {
         return;
       }
       if (error) {
-        body.replaceChildren(note(`Couldn't load your conversations: ${error}`));
+        const message = `Couldn't load your conversations: ${error}`;
+        status.textContent = message;
+        body.replaceChildren(note(message));
         return;
       }
       if (!data) {
+        status.textContent = 'Loading…';
         body.replaceChildren(note('Loading…'));
         return;
       }
-      const { total, rows, models } = summarizeUsage(data.conversations, periodStart(period));
+      const { total, undated, rows, models } = summarizeUsage(
+        data.conversations,
+        periodStart(period),
+      );
+      status.textContent = `${cost(total)} in ${periodLabel().toLowerCase()}`;
       const stats = document.createElement('dl');
-      stats.className = 'grid grid-cols-1 gap-3 sm:grid-cols-3';
+      stats.className = 'grid gap-3';
+      stats.style.gridTemplateColumns = 'repeat(auto-fit, minmax(10rem, 1fr))';
       for (const [label, value] of [
         ['Cost', cost(total)],
         ['Conversations', String(rows.length)],
@@ -2400,7 +2460,7 @@ function usagePage(host) {
         stats.append(tile);
       }
       if (!rows.length) {
-        body.replaceChildren(stats, note('No costs in this period.'));
+        body.replaceChildren(stats, note(undated > 0 ? `No dated costs in this period; ${cost(undated)} more has no date, so only All time counts it.` : 'No costs in this period.'));
         return;
       }
       const titleLink = (row) => {
@@ -2409,12 +2469,18 @@ function usagePage(host) {
         return link;
       };
       const notes = [];
+      if (undated > 0) {
+        notes.push(note(`${cost(undated)} more has no date, so only All time counts it.`));
+      }
       if (rows.some((row) => row.acp)) {
         notes.push(note("ACP agents' costs are what the same calls would cost through the API; their subscription may bill differently."));
       }
       if (data.more) {
         notes.push(note(`Only your latest ${USAGE_PAGES * 100} conversations are counted.`));
       }
+      notes.push(
+        note(`Loaded at ${loadedAt.toLocaleTimeString(language, { hour: 'numeric', minute: '2-digit' })}.`),
+      );
       body.replaceChildren(
         stats,
         section('By model', table(['Model', 'Cost'], models.map(([model, value]) => [model, cost(value)]))),
@@ -2434,21 +2500,25 @@ function usagePage(host) {
         render();
         return;
       }
+      const current = (loads += 1);
       data = null;
       error = null;
       render();
+      let next = null;
+      let failed = null;
       try {
-        const next = await loadUsage(host);
-        if (disposed) return;
-        data = next;
+        next = await loadUsage(host);
       } catch (failure) {
-        if (disposed) return;
-        error = failure?.message || 'the Agent Server did not answer.';
+        failed = failure?.message || 'the Agent Server did not answer.';
       }
+      if (disposed || current !== loads) return;
+      data = next;
+      error = failed;
+      loadedAt = new Date();
       render();
     }
 
-    root.querySelector('[data-testid="extras-usage-refresh"]').addEventListener('click', load);
+    refresh.addEventListener('click', load);
     container.append(root);
     load();
     return () => {

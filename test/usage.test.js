@@ -148,3 +148,50 @@ test('ignores an answer that arrives after the page closes', async (t) => {
 
   assert.equal(container.textContent, '');
 });
+
+test('keeps focus on the period chosen, and says the total', async (t) => {
+  const { page, container } = await openUsage(t, [
+    [conversation('a', 'Alpha', [[2, 3]])],
+  ]);
+  const week = container.querySelector('[data-period="7"]');
+  week.focus();
+  week.click();
+  await flush();
+
+  assert.equal(page.document.activeElement, week);
+  assert.equal(week.getAttribute('aria-pressed'), 'true');
+  assert.equal(container.querySelector('[role="status"]').textContent, '$2.00 in 7 days');
+});
+
+test('shows only the latest load when Refresh is pressed again', async (t) => {
+  const page = setupPage(t, { url: URL, settings: { usagePage: true } });
+  const host = fakeHost();
+  const answers = [];
+  host.agentServer.request = () => new Promise((resolve, reject) => answers.push({ resolve, reject }));
+  await activateExtension(page, host);
+  const container = page.document.createElement('div');
+  page.document.body.append(container);
+  host.pages.get('usage')({ container, path: '', navigate: host.navigate });
+  const refresh = container.querySelector('[data-testid="extras-usage-refresh"]');
+  assert.equal(refresh.disabled, true, 'not while loading');
+
+  refresh.disabled = false;
+  refresh.click();
+  answers[1].reject(new Error('Offline'));
+  await flush();
+  answers[0].resolve({ items: [conversation('a', 'Alpha', [[1, 0]])] });
+  await flush();
+  assert.match(container.textContent, /Offline/);
+  assert.equal(refresh.disabled, false);
+});
+
+test('counts costs with no date for all time only, and names unknown models', async (t) => {
+  const undated = conversation('a', 'Alpha', [], { model: '' });
+  undated.stats.usage_to_metrics.agent.accumulated_cost = 4;
+  const { container } = await openUsage(t, [[undated]]);
+
+  assert.match(container.textContent, /\$4\.00 more has no date/);
+  await choose(container, 'all');
+  assert.deepEqual(tiles(container), ['$4.00', '1', '$4.00']);
+  assert.equal(rows(container, 'By model')[0].cells[0].textContent, 'Unknown model');
+});

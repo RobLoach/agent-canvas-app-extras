@@ -10,10 +10,16 @@ const BODY = `
     <div id="frame" class="relative"><div id="body" class="w-96"></div></div>
   </div>
   <nav data-testid="automations-navbar-mobile" class="lg:hidden flex gap-1 overflow-x-auto"><a id="tab" href="/automations">Dashboard</a></nav>
-  <div id="openhands-extras-shortcuts"><div role="dialog" aria-modal="true" class="relative"></div></div>`;
+  <div id="openhands-extras-shortcuts"><div role="dialog" aria-modal="true" class="relative"></div></div>
+  <div role="dialog" aria-modal="true" class="fixed inset-0 z-70 flex items-start justify-center px-3">
+    <button class="absolute inset-0 cursor-default"></button>
+    <div id="command-menu" class="relative overflow-hidden rounded-2xl"></div>
+  </div>`;
 
+// The style's rules, inside its phone-width media query.
 const rules = (page) =>
-  [...(page.document.getElementById('openhands-extras-mobile-fixes')?.sheet?.cssRules ?? [])];
+  [...(page.document.getElementById('openhands-extras-mobile-fixes')?.sheet?.cssRules ?? [])]
+    .flatMap((rule) => (rule.media ? [...rule.cssRules] : [rule]));
 const styled = (page, id) =>
   rules(page).some((rule) => page.document.getElementById(id).matches(rule.selectorText));
 
@@ -30,6 +36,11 @@ test("keeps Canvas's dialogs on screen, and the Automate tabs at their width", a
 
   for (const id of ['frame', 'body', 'tab']) assert.ok(styled(page, id), id);
   assert.ok(!styled(page, 'modal'));
+  assert.ok(!styled(page, 'command-menu'), "Canvas's command menu has its own layout");
+  assert.match(
+    page.document.getElementById('openhands-extras-mobile-fixes').textContent,
+    /@media \(max-width: 767px\)/,
+  );
   assert.ok(
     ![...page.document.querySelectorAll('#openhands-extras-shortcuts *')].some((element) =>
       rules(page).some((rule) => element.matches(rule.selectorText)),
