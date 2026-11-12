@@ -210,6 +210,24 @@ test('remembers unseen runs across reloads and shares them between windows', asy
   assert.equal(page.badge, 0);
 });
 
+test("counts a run once whether or not its link has Canvas's dashes", async (t) => {
+  const dashed = `${A.slice(0, 8)}-${A.slice(8, 12)}-${A.slice(12, 16)}-${A.slice(16, 20)}-${A.slice(20)}`;
+  const { page, host } = await start(t, {
+    path: `/conversations/${dashed}`,
+    settings: { tabStatus: true },
+    statuses: { [A]: 'running' },
+  });
+  page.window.localStorage.setItem(UNSEEN, JSON.stringify([dashed]));
+  page.hidden = true;
+  await finish(page, host);
+  assert.equal(page.badge, 1);
+
+  page.navigate(`/conversations/${A}`);
+  page.returnToTab();
+  await page.check();
+  assert.equal(page.badge, 0);
+});
+
 test('drops unseen runs that were resumed or deleted elsewhere', async (t) => {
   const page = await withUnseen(t, [A, B], () => [{ execution_status: 'running' }, null]);
 

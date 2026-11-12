@@ -1238,7 +1238,9 @@ function appIconBadge() {
 const unseenRuns = {
   load() {
     const ids = readJson(UNSEEN_KEY, []);
-    return new Set(Array.isArray(ids) ? ids : []);
+    return new Set(
+      Array.isArray(ids) ? ids.filter((id) => typeof id === 'string').map(conversationKey) : [],
+    );
   },
   mark(id, unseen) {
     const ids = unseenRuns.load();
