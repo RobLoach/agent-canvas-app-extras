@@ -44,6 +44,7 @@ const SWITCH_KEYS = [
   'confirmationSound',
   'unreadMarkers',
   'installableApp',
+  'mobileFixes',
   'usagePage',
 ];
 

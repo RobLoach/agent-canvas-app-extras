@@ -20,6 +20,7 @@ const VIEWING_KEY = 'openhands-extras:viewing';
 const READ_LIMIT = 500;
 const SECTION_ID = 'openhands-extras-settings';
 const WIDE_STYLE_ID = 'openhands-extras-wide-canvas';
+const MOBILE_STYLE_ID = 'openhands-extras-mobile-fixes';
 const TABLES_STYLE_ID = 'openhands-extras-responsive-tables';
 const TABLE_ATTR = 'data-extras-table';
 const THEME_META_ID = 'openhands-extras-theme-color';
@@ -54,6 +55,18 @@ const THINKING_KEY = 'THINKING$TITLE';
 // CSS beats Tailwind's @layer utilities regardless of specificity.
 const WIDE_CANVAS_CSS =
   '[data-agent-server-ui] .max-w-200.h-full.min-h-0 { max-width: none; }';
+
+// Canvas's dialogs (ModalBackdrop) centre fixed-width content with no height
+// limit, so on a phone a tall or wide one runs off the screen, out of reach.
+// The Automate pages' tab strip (ManifestSubpageLayout) gives its links
+// equal widths that cut their names off, though it can scroll.
+const MOBILE_FIXES_CSS = `
+[role="dialog"][aria-modal="true"].fixed.inset-0 > .relative {
+  box-sizing: border-box; max-width: 100vw; max-height: 100dvh;
+  overflow-y: auto; padding: 0.75rem;
+}
+[role="dialog"][aria-modal="true"].fixed.inset-0 > .relative > * { max-width: 100%; }
+[data-testid$="-navbar-mobile"] > a { flex: none; width: auto; }`;
 
 // Canvas's Markdown tables, each in a scroller that lets it run wider than
 // the chat. Basic Table marks a table it stacks with .bt, and each cell with
@@ -200,6 +213,13 @@ const SWITCHES = [
     description:
       "Let your browser install Canvas as an app, with its icon and a title bar in Canvas's colours, clear of notches and home indicators.",
     check: installProblem,
+  },
+  {
+    key: 'mobileFixes',
+    group: 'App',
+    label: 'Mobile fixes',
+    description:
+      "Keep Canvas's dialogs within small screens, scrolling when they're taller, and stop the Automate tabs cutting off their names.",
   },
   {
     key: 'usagePage',
@@ -1224,12 +1244,10 @@ function settingsPage(host, onChange) {
   };
 }
 
-const wideCanvas = () => ({
-  refresh: () =>
-    settings.wideCanvas
-      ? setStyle(WIDE_STYLE_ID, WIDE_CANVAS_CSS)
-      : removeElement(WIDE_STYLE_ID),
-  dispose: () => removeElement(WIDE_STYLE_ID),
+// A switch that's only a style, added while it's on.
+const styleSwitch = (key, id, css) => ({
+  refresh: () => (settings[key] ? setStyle(id, css) : removeElement(id)),
+  dispose: () => removeElement(id),
 });
 
 // Basic Table, embedded at the end of this file, stacks a Markdown table while
@@ -2479,7 +2497,8 @@ export function activate(host) {
     watchCustomizeMenu(host),
     sidebarLinks(host.extension.name),
     settingsView,
-    wideCanvas(),
+    styleSwitch('wideCanvas', WIDE_STYLE_ID, WIDE_CANVAS_CSS),
+    styleSwitch('mobileFixes', MOBILE_STYLE_ID, MOBILE_FIXES_CSS),
     watchResponsiveTables(),
     agentStatus,
     watchUnread(loadConversations, checks),

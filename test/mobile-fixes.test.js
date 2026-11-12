@@ -1,0 +1,41 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { activateExtension, fakeHost, setupPage } from './helpers.js';
+
+// Canvas's ModalBackdrop and ManifestSubpageLayout, as they render, and this
+// app's own shortcuts list, which is styled on its own.
+const BODY = `
+  <div id="modal" role="dialog" aria-modal="true" tabindex="-1" class="fixed inset-0 flex items-center justify-center outline-none z-60">
+    <div class="fixed inset-0 bg-black opacity-60"></div>
+    <div id="frame" class="relative"><div id="body" class="w-96"></div></div>
+  </div>
+  <nav data-testid="automations-navbar-mobile" class="lg:hidden flex gap-1 overflow-x-auto"><a id="tab" href="/automations">Dashboard</a></nav>
+  <div id="openhands-extras-shortcuts"><div role="dialog" aria-modal="true" class="relative"></div></div>`;
+
+const rules = (page) =>
+  [...(page.document.getElementById('openhands-extras-mobile-fixes')?.sheet?.cssRules ?? [])];
+const styled = (page, id) =>
+  rules(page).some((rule) => page.document.getElementById(id).matches(rule.selectorText));
+
+test('Mobile fixes are off by default', async (t) => {
+  const page = setupPage(t, { body: BODY });
+  await activateExtension(page, fakeHost());
+
+  assert.deepEqual(rules(page), []);
+});
+
+test("keeps Canvas's dialogs on screen, and the Automate tabs at their width", async (t) => {
+  const page = setupPage(t, { body: BODY, settings: { mobileFixes: true } });
+  await activateExtension(page, fakeHost());
+
+  for (const id of ['frame', 'body', 'tab']) assert.ok(styled(page, id), id);
+  assert.ok(!styled(page, 'modal'));
+  assert.ok(
+    ![...page.document.querySelectorAll('#openhands-extras-shortcuts *')].some((element) =>
+      rules(page).some((rule) => element.matches(rule.selectorText)),
+    ),
+  );
+
+  await page.changeSettings({});
+  assert.deepEqual(rules(page), []);
+});
