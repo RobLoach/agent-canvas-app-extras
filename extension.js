@@ -850,8 +850,9 @@ function watchQuietActivity(statusOf) {
   };
 }
 
-// Browsers only let audio start after a click on the page, so the context is
-// created when the switch is turned on; any later click unlocks it too.
+// Browsers only let audio start after a click or key press on the page, so
+// the context is created when the switch is turned on, and activate() unlocks
+// it on each later one, e.g. after a reload.
 let audio = null;
 function unlockAudio() {
   const Context = window.AudioContext ?? window.webkitAudioContext;
@@ -1834,6 +1835,12 @@ export function activate(host) {
     if (key === STORAGE_KEY) each('refresh');
   };
   window.addEventListener('storage', onStorage);
+  const onInput = () => {
+    if (settings.confirmationSound) unlockAudio();
+  };
+  for (const type of ['pointerdown', 'keydown']) {
+    window.addEventListener(type, onInput, true);
+  }
   each('refresh');
   // One body observer for all: Canvas renders the app card on Customize >
   // Apps, re-renders the chat as a run's events stream in, and may re-mount
@@ -1851,6 +1858,9 @@ export function activate(host) {
     if (window[INSTANCE] === dispose) delete window[INSTANCE];
     observer.disconnect();
     window.removeEventListener('storage', onStorage);
+    for (const type of ['pointerdown', 'keydown']) {
+      window.removeEventListener(type, onInput, true);
+    }
     let failure = null;
     for (const feature of features) {
       try {

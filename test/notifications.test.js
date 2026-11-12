@@ -132,6 +132,26 @@ test('chimes when a run needs confirmation while you are away', async (t) => {
   assert.equal(page.notifications.length, 0);
 });
 
+test('unlocks the chime on the first click or key press after a reload', async (t) => {
+  let contexts = 0;
+  const { page } = await start(t, {
+    settings: { confirmationSound: true },
+    before(page) {
+      const { AudioContext } = page.window;
+      page.window.AudioContext = class extends AudioContext {
+        constructor() {
+          super();
+          contexts += 1;
+        }
+      };
+    },
+  });
+  assert.equal(contexts, 0);
+
+  page.document.body.dispatchEvent(new page.window.KeyboardEvent('keydown', { bubbles: true }));
+  assert.equal(contexts, 1);
+});
+
 test('does not chime while you are watching or when a run finishes', async (t) => {
   const { page, host } = await watchRun(t, { confirmationSound: true });
   await finish(page, host, A, 'waiting_for_confirmation');
