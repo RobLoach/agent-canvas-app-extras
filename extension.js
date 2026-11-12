@@ -20,6 +20,9 @@ const WIDE_STYLE_ID = 'openhands-extras-wide-canvas';
 const TABLES_STYLE_ID = 'openhands-extras-responsive-tables';
 const TABLE_ATTR = 'data-extras-table';
 const THEME_META_ID = 'openhands-extras-theme-color';
+const MANIFEST_ID = 'openhands-extras-manifest';
+const TOUCH_ICON_ID = 'openhands-extras-touch-icon';
+const SAFE_AREA_STYLE_ID = 'openhands-extras-safe-area';
 const QUIET_STYLE_ID = 'openhands-extras-quiet-activity';
 const QUIET_ATTR = 'data-extras-quiet';
 const SHOWN_ATTR = 'data-extras-shown';
@@ -176,6 +179,13 @@ const SWITCHES = [
       "Match the installed app's title bar to Canvas's colour theme.",
   },
   {
+    key: 'installableApp',
+    label: 'Installable app',
+    description:
+      'Let your browser install Canvas as an app, with its icon, and keep it clear of notches and home indicators.',
+    check: installProblem,
+  },
+  {
     key: 'quietActivity',
     status: 'follow',
     label: 'Collapse agent activity',
@@ -221,12 +231,17 @@ function saveSettings(next) {
   else localStorage.removeItem(STORAGE_KEY);
 }
 
-// One of our own elements in <head>, by id, created on first use.
-function headElement(id, tag, { first = false } = {}) {
+// One of our own elements in <head>, by id, created on first use with these
+// attributes: Chromium only picks up a manifest link that has its rel when
+// it's added.
+function headElement(id, tag, { first = false, attributes = {} } = {}) {
   let element = document.getElementById(id);
   if (!element) {
     element = document.createElement(tag);
     element.id = id;
+    for (const [name, value] of Object.entries(attributes)) {
+      element.setAttribute(name, value);
+    }
     document.head[first ? 'prepend' : 'append'](element);
   }
   return element;
@@ -348,6 +363,233 @@ function watchThemeColor() {
       observer.disconnect();
       scheme?.removeEventListener?.('change', apply);
       removeElement(THEME_META_ID);
+    },
+  };
+}
+
+// Canvas links no web app manifest, so browsers won't offer to install it.
+// This links one of its own, as a data: URL, with absolute URLs under
+// Canvas's base path, as relative ones would resolve against the data: URL.
+// Its icons are Canvas's own favicon.svg, also drawn as PNGs where the
+// browser can, for launchers that want them. It stands down should Canvas
+// link a manifest itself.
+const APP_NAME = 'OpenHands';
+const IOS_META = {
+  'apple-mobile-web-app-capable': 'yes',
+  'apple-mobile-web-app-status-bar-style': 'black-translucent',
+  'apple-mobile-web-app-title': APP_NAME,
+  'mobile-web-app-capable': 'yes',
+};
+const iosMetaId = (name) => `openhands-extras-${name}`;
+// An installed window paints under the notch and home indicator with
+// viewport-fit=cover, so Canvas's shell pads its content back out of them.
+// The insets are 0 everywhere else. Canvas's desktop app has a title bar band
+// of its own, padded with pt-7.
+const SAFE_AREA_CSS = `[data-testid="root-layout"]:not(.pt-7) {
+  padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px)
+    env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+}`;
+const VIEWPORT_FIT = 'viewport-fit=cover';
+// Icons as [size, purpose]: maskable ones keep the tile in the middle 80%,
+// which launchers may crop to a circle.
+const PNG_ICONS = [
+  [192, 'any'],
+  [512, 'any'],
+  [512, 'maskable'],
+];
+const TOUCH_ICON_SIZE = 180;
+// Shortcuts on the installed app's icon, by path under Canvas's base path.
+// Canvas has no page listing conversations, which its sidebar does, so
+// "Conversations" opens the latest, as this app finds it by the query.
+// /conversations is Canvas's own home, which / may redirect from.
+const LATEST_PARAM = 'openhands-extras';
+const LATEST_PATH = `conversations?${LATEST_PARAM}=latest`;
+const LATEST_CONVERSATION_PATH =
+  '/api/conversations/search?limit=1&sort_order=UPDATED_AT_DESC';
+const SHORTCUTS = [
+  ['New chat', 'conversations'],
+  ['Conversations', LATEST_PATH],
+  ['Settings', 'settings'],
+];
+
+const canvasManifest = () =>
+  document.head.querySelector(`link[rel~="manifest"]:not(#${MANIFEST_ID})`);
+
+function installProblem() {
+  return canvasManifest() ? 'Canvas is already installable.' : null;
+}
+
+// Canvas's mount point, as React Router has it, e.g. "/" or "/canvas/".
+function canvasBase() {
+  const basename = window.__reactRouterContext?.basename ?? '/';
+  return new URL(basename.endsWith('/') ? basename : `${basename}/`, location.origin)
+    .href;
+}
+
+function loadImage(url) {
+  return new Promise((resolve) => {
+    const image = new window.Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => resolve(null);
+    image.src = url;
+  });
+}
+
+// The image as a square PNG data URL, or null where the browser can't draw.
+function pngIcon(image, size, purpose) {
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const context = canvas.getContext('2d');
+  if (!context) return null;
+  let inset = 0;
+  if (purpose === 'maskable') {
+    context.fillStyle = '#000';
+    context.fillRect(0, 0, size, size);
+    inset = size * 0.1;
+  }
+  context.drawImage(image, inset, inset, size - 2 * inset, size - 2 * inset);
+  return canvas.toDataURL('image/png');
+}
+
+// Opens the latest conversation, or Canvas's home without one.
+async function openLatest(host) {
+  const found = await host.agentServer
+    .request({ path: LATEST_CONVERSATION_PATH })
+    .catch(() => null);
+  const id = found?.items?.[0]?.id;
+  host.navigate(id ? `/conversations/${conversationKey(id)}` : '/conversations');
+}
+
+function installableApp(host) {
+  let launches = false;
+  let pngs = [];
+  let touchIcon = null;
+  let pngsFor = null;
+  let viewport = null;
+  let viewportContent = null;
+
+  // Canvas's favicon as PNG icons, once per URL; none until they're drawn.
+  function drawIcons(svgUrl) {
+    if (pngsFor === svgUrl) return;
+    pngsFor = svgUrl;
+    pngs = [];
+    touchIcon = null;
+    loadImage(svgUrl).then((image) => {
+      if (!image || pngsFor !== svgUrl) return;
+      const drawn = PNG_ICONS.map(([size, purpose]) => ({
+        src: pngIcon(image, size, purpose),
+        sizes: `${size}x${size}`,
+        type: 'image/png',
+        purpose,
+      }));
+      if (drawn.some(({ src }) => !src)) return;
+      pngs = drawn;
+      touchIcon = pngIcon(image, TOUCH_ICON_SIZE, 'any');
+      apply();
+    });
+  }
+
+  function setViewport(on) {
+    if (on && !viewport) {
+      viewport = document.head.querySelector('meta[name="viewport"]');
+      viewportContent = viewport?.getAttribute('content') ?? null;
+      if (viewportContent?.includes('viewport-fit')) viewport = null;
+      viewport?.setAttribute('content', `${viewportContent}, ${VIEWPORT_FIT}`);
+    } else if (!on && viewport) {
+      viewport.setAttribute('content', viewportContent);
+      viewport = null;
+    }
+  }
+
+  function remove() {
+    removeElement(MANIFEST_ID);
+    removeElement(TOUCH_ICON_ID);
+    removeElement(SAFE_AREA_STYLE_ID);
+    for (const name of Object.keys(IOS_META)) removeElement(iosMetaId(name));
+    setViewport(false);
+  }
+
+  function apply() {
+    if (!settings.installableApp || canvasManifest()) {
+      remove();
+      return;
+    }
+    const base = canvasBase();
+    const svgUrl = new URL('favicon.svg', base).href;
+    drawIcons(svgUrl);
+    const color = canvasBackground() ?? '#000';
+    const manifest = {
+      id: base,
+      name: APP_NAME,
+      short_name: APP_NAME,
+      description:
+        'The self-hosted developer control center for coding agents and automations.',
+      start_url: base,
+      scope: base,
+      display: 'standalone',
+      theme_color: color,
+      background_color: color,
+      categories: ['developer', 'productivity', 'utilities'],
+      shortcuts: SHORTCUTS.map(([name, path]) => ({
+        name,
+        url: new URL(path, base).href,
+      })),
+      // Launches, e.g. from a shortcut, reuse the open window, which goes
+      // where they point without reloading Canvas.
+      launch_handler: { client_mode: ['focus-existing', 'auto'] },
+      icons: [
+        ...pngs,
+        { src: svgUrl, sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
+      ],
+    };
+    const href = `data:application/manifest+json,${encodeURIComponent(JSON.stringify(manifest))}`;
+    const link = headElement(MANIFEST_ID, 'link', {
+      attributes: { rel: 'manifest', href },
+    });
+    setAttribute(link, 'href', href);
+    const touch = headElement(TOUCH_ICON_ID, 'link', {
+      attributes: { rel: 'apple-touch-icon' },
+    });
+    setAttribute(touch, 'href', touchIcon ?? svgUrl);
+    for (const [name, content] of Object.entries(IOS_META)) {
+      headElement(iosMetaId(name), 'meta', { attributes: { name, content } });
+    }
+    setStyle(SAFE_AREA_STYLE_ID, SAFE_AREA_CSS);
+    setViewport(true);
+    handleLaunches(base);
+  }
+
+  // Launches go to their URL inside Canvas, as host.navigate() does, from
+  // Canvas's base path. Browsers only take one consumer, and pass this
+  // window's own launch to it, so the latest conversation opens from a cold
+  // start too. A page opened without the launch queue may still carry the
+  // query.
+  function handleLaunches(base) {
+    if (launches) return;
+    launches = true;
+    const go = (url) => {
+      if (url.searchParams.get(LATEST_PARAM) === 'latest') {
+        openLatest(host);
+      } else if (url.href !== location.href) {
+        host.navigate(`/${url.href.slice(base.length)}`);
+      }
+    };
+    if (window.launchQueue) {
+      window.launchQueue.setConsumer(({ targetURL }) => {
+        if (targetURL && settings.installableApp) go(new URL(targetURL));
+      });
+    } else {
+      go(new URL(location.href));
+    }
+  }
+
+  // Canvas's theme can change the manifest's colours.
+  return {
+    refresh: apply,
+    onDomChange: apply,
+    dispose() {
+      remove();
+      if (launches) window.launchQueue?.setConsumer(() => {});
     },
   };
 }
@@ -1569,6 +1811,7 @@ export function activate(host) {
     agentStatus,
     watchUnread(loadConversations),
     watchThemeColor(),
+    installableApp(host),
     quietActivity,
   ];
   function each(method, ...args) {

@@ -14,6 +14,7 @@ An [OpenHands](https://www.openhands.dev/) Agent Canvas app that adds a few UI t
 | **App icon badge** | Counts the conversations that need your input on the installed app's icon. |
 | **Unread markers** | Marks the conversations in the sidebar that changed since you last had them open. |
 | **Title bar colour** | Matches the installed app's title bar to Canvas's colour theme. |
+| **Installable app** | Lets your browser install Canvas as an app, with New chat, Conversations and Settings shortcuts, clear of notches and home indicators. |
 | **Collapse agent activity** | Folds "Running" and "Reading" chat entries into expandable "Thinking" entries. |
 
 ## Install
