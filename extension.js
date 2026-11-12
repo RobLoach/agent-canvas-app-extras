@@ -15,6 +15,7 @@ const STORAGE_KEY = 'openhands-extras:settings';
 const INSTANCE = Symbol.for('openhands-extras');
 const UNSEEN_KEY = 'openhands-extras:unseen';
 const READ_KEY = 'openhands-extras:read';
+const VIEWING_KEY = 'openhands-extras:viewing';
 const SECTION_ID = 'openhands-extras-settings';
 const WIDE_STYLE_ID = 'openhands-extras-wide-canvas';
 const TABLES_STYLE_ID = 'openhands-extras-responsive-tables';
@@ -1462,7 +1463,8 @@ function watchAgentStatus(host, loadConversations, checks, onRender) {
       previous &&
       previous !== next &&
       entry.sawActive &&
-      (id !== openId || away());
+      (id !== openId || away()) &&
+      readJson(VIEWING_KEY, null) !== id;
     if (!changedWhileAway) return waitingChanged;
     if (counting() && ENDED_STATUSES.has(next)) unseenRuns.mark(id, true);
     if (settings.notifications && NOTIFY_STATUSES.has(next)) {
@@ -1504,6 +1506,7 @@ function watchAgentStatus(host, loadConversations, checks, onRender) {
       }
       render();
     }
+    shareViewing();
     if (openId && !away()) unseenRuns.mark(openId, false);
     for (const [id, entry] of conversations) {
       const followRun = watching() && ACTIVE_STATUSES.has(entry.status);
@@ -1557,8 +1560,24 @@ function watchAgentStatus(host, loadConversations, checks, onRender) {
     poll = running || counting() ? setTimeout(checks.request, CHECK_MS) : 0;
   }
 
+  // The conversation this window shows while it has focus, shared so other
+  // windows following it don't notify you about it.
+  let shared = null;
+  function shareViewing() {
+    const id = !disposed && watching() && !away() ? openId : null;
+    if (id === shared) return;
+    try {
+      if (id) localStorage.setItem(VIEWING_KEY, JSON.stringify(id));
+      else if (readJson(VIEWING_KEY, null) === shared) localStorage.removeItem(VIEWING_KEY);
+    } catch {
+      // Other windows may notify you about it then.
+    }
+    shared = id;
+  }
+
   // Coming back to the tab or window clears the finished/error/paused badges.
   function onReturn() {
+    shareViewing();
     if (away() || !watching()) return;
     const open = conversations.get(openId);
     if (open && !ACTIVE_STATUSES.has(open.status)) open.sawActive = false;
@@ -1583,6 +1602,7 @@ function watchAgentStatus(host, loadConversations, checks, onRender) {
   });
   document.addEventListener('visibilitychange', onReturn);
   window.addEventListener('focus', onReturn);
+  window.addEventListener('blur', shareViewing);
 
   return {
     check,
@@ -1617,6 +1637,8 @@ function watchAgentStatus(host, loadConversations, checks, onRender) {
       clearTimeout(poll);
       document.removeEventListener('visibilitychange', onReturn);
       window.removeEventListener('focus', onReturn);
+      window.removeEventListener('blur', shareViewing);
+      shareViewing();
       openId = null;
       conversations.clear();
       render();

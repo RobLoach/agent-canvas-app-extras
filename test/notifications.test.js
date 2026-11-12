@@ -152,6 +152,21 @@ test('unlocks the chime on the first click or key press after a reload', async (
   assert.equal(contexts, 1);
 });
 
+test('leaves a run to the window you are watching it in', async (t) => {
+  const { page, host } = await watchRun(t);
+  const viewing = () => page.window.localStorage.getItem('openhands-extras:viewing');
+  assert.equal(viewing(), JSON.stringify(A));
+
+  page.hidden = true;
+  page.window.document.dispatchEvent(new page.window.Event('visibilitychange'));
+  assert.equal(viewing(), null);
+
+  // Another window shows it.
+  page.window.localStorage.setItem('openhands-extras:viewing', JSON.stringify(A));
+  await finish(page, host);
+  assert.equal(page.notifications.length, 0);
+});
+
 test('does not chime while you are watching or when a run finishes', async (t) => {
   const { page, host } = await watchRun(t, { confirmationSound: true });
   await finish(page, host, A, 'waiting_for_confirmation');
