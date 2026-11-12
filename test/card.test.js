@@ -148,6 +148,27 @@ test('resets the settings, turning every feature off', async (t) => {
   assert.equal(page.document.querySelectorAll('#openhands-extras-settings').length, 1);
 });
 
+test('a reset while the permission prompt is open keeps every switch off', async (t) => {
+  const page = setupPage(t, { body: CARDS });
+  let answer;
+  page.window.Notification.requestPermission = () =>
+    new Promise((resolve) => {
+      answer = () => {
+        page.permission = 'granted';
+        resolve('granted');
+      };
+    });
+  await activateExtension(page, fakeHost());
+  switchFor(page, 'notifications').click();
+  await flush();
+
+  page.document.querySelector('[data-testid="extras-reset-settings"]').click();
+  answer();
+  await flush();
+  assert.equal(page.window.localStorage.getItem('openhands-extras:settings'), null);
+  assert.equal(switchFor(page, 'notifications').checked, false);
+});
+
 test('turns on the switches that merged ones moved into', async (t) => {
   const page = setupPage(t, {
     body: CARDS,

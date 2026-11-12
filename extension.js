@@ -959,6 +959,8 @@ function buildSwitch(item, onChange) {
   render();
   input.addEventListener('change', async () => {
     const problem = input.checked && enable ? await enable() : null;
+    // Reset, or another tab, rebuilt the switches while the browser asked.
+    if (!block.isConnected) return;
     if (problem) input.checked = false;
     hint.textContent = problem ?? item.description;
     render();
