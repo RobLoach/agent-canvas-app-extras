@@ -140,3 +140,20 @@ test('rests while the tab is hidden, and checks at once when it shows again', as
   assert.equal(host.requests.length, requests + 1);
   assert.deepEqual(unread(page), ['Alpha']);
 });
+
+test('remembers only the conversations you read most recently', async (t) => {
+  const seen = Object.fromEntries(
+    Array.from({ length: 600 }, (_, index) => [`old${index}`, index]),
+  );
+  const { page } = await open(t, {
+    path: `/conversations/${dashed(A)}`,
+    before(page) {
+      page.window.localStorage.setItem(READ, JSON.stringify({ since: 0, seen }));
+    },
+  });
+
+  const saved = JSON.parse(page.window.localStorage.getItem(READ)).seen;
+  assert.equal(Object.keys(saved).length, 500);
+  assert.ok(saved[A]);
+  assert.equal(saved.old0, undefined);
+});

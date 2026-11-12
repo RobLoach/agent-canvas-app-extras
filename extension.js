@@ -16,6 +16,8 @@ const INSTANCE = Symbol.for('openhands-extras');
 const UNSEEN_KEY = 'openhands-extras:unseen';
 const READ_KEY = 'openhands-extras:read';
 const VIEWING_KEY = 'openhands-extras:viewing';
+// How many conversations' read times are kept.
+const READ_LIMIT = 500;
 const SECTION_ID = 'openhands-extras-settings';
 const WIDE_STYLE_ID = 'openhands-extras-wide-canvas';
 const TABLES_STYLE_ID = 'openhands-extras-responsive-tables';
@@ -1657,7 +1659,14 @@ const readState = {
     const state = readJson(READ_KEY, null);
     return typeof state?.since === 'number' && state.seen ? state : null;
   },
+  // Only the conversations you opened most recently are kept.
   save(state) {
+    const seen = Object.entries(state.seen);
+    if (seen.length > READ_LIMIT) {
+      state.seen = Object.fromEntries(
+        seen.sort(([, a], [, b]) => b - a).slice(0, READ_LIMIT),
+      );
+    }
     try {
       localStorage.setItem(READ_KEY, JSON.stringify(state));
     } catch {
