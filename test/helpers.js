@@ -199,6 +199,12 @@ export function fakeHost({
     updated,
     requests: [],
     navigations: [],
+    // Each registered page's mount, by id.
+    pages: new Map(),
+    registerPage(id, mount) {
+      host.pages.set(id, mount);
+      return () => host.pages.delete(id);
+    },
     navigate: (path) => host.navigations.push(path),
     agentServer: {
       async request({ path }) {
