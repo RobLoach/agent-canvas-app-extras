@@ -398,6 +398,19 @@ const PNG_ICONS = [
   [512, 'maskable'],
 ];
 const TOUCH_ICON_SIZE = 180;
+// Shortcuts on the installed app's icon, by path under Canvas's base path.
+// Canvas has no page listing conversations, which its sidebar does, so
+// "Conversations" opens the latest, as this app finds it by the query.
+// /conversations is Canvas's own home, which / may redirect from.
+const LATEST_PARAM = 'openhands-extras';
+const LATEST_PATH = `conversations?${LATEST_PARAM}=latest`;
+const LATEST_CONVERSATION_PATH =
+  '/api/conversations/search?limit=1&sort_order=UPDATED_AT_DESC';
+const SHORTCUTS = [
+  ['New chat', 'conversations'],
+  ['Conversations', LATEST_PATH],
+  ['Settings', 'settings'],
+];
 
 const canvasManifest = () =>
   document.head.querySelector(`link[rel~="manifest"]:not(#${MANIFEST_ID})`);
@@ -438,7 +451,17 @@ function pngIcon(image, size, purpose) {
   return canvas.toDataURL('image/png');
 }
 
-function installableApp() {
+// Opens the latest conversation, or Canvas's home without one.
+async function openLatest(host) {
+  const found = await host.agentServer
+    .request({ path: LATEST_CONVERSATION_PATH })
+    .catch(() => null);
+  const id = found?.items?.[0]?.id;
+  host.navigate(id ? `/conversations/${conversationKey(id)}` : '/conversations');
+}
+
+function installableApp(host) {
+  let launches = false;
   let pngs = [];
   let touchIcon = null;
   let pngsFor = null;
@@ -507,6 +530,13 @@ function installableApp() {
       theme_color: color,
       background_color: color,
       categories: ['developer', 'productivity', 'utilities'],
+      shortcuts: SHORTCUTS.map(([name, path]) => ({
+        name,
+        url: new URL(path, base).href,
+      })),
+      // Launches, e.g. from a shortcut, reuse the open window, which goes
+      // where they point without reloading Canvas.
+      launch_handler: { client_mode: ['focus-existing', 'auto'] },
       icons: [
         ...pngs,
         { src: svgUrl, sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
@@ -526,10 +556,42 @@ function installableApp() {
     }
     setStyle(SAFE_AREA_STYLE_ID, SAFE_AREA_CSS);
     setViewport(true);
+    handleLaunches(base);
+  }
+
+  // Launches go to their URL inside Canvas, as host.navigate() does, from
+  // Canvas's base path. Browsers only take one consumer, and pass this
+  // window's own launch to it, so the latest conversation opens from a cold
+  // start too. A page opened without the launch queue may still carry the
+  // query.
+  function handleLaunches(base) {
+    if (launches) return;
+    launches = true;
+    const go = (url) => {
+      if (url.searchParams.get(LATEST_PARAM) === 'latest') {
+        openLatest(host);
+      } else if (url.href !== location.href) {
+        host.navigate(`/${url.href.slice(base.length)}`);
+      }
+    };
+    if (window.launchQueue) {
+      window.launchQueue.setConsumer(({ targetURL }) => {
+        if (targetURL && settings.installableApp) go(new URL(targetURL));
+      });
+    } else {
+      go(new URL(location.href));
+    }
   }
 
   // Canvas's theme can change the manifest's colours.
-  return { refresh: apply, onDomChange: apply, dispose: remove };
+  return {
+    refresh: apply,
+    onDomChange: apply,
+    dispose() {
+      remove();
+      if (launches) window.launchQueue?.setConsumer(() => {});
+    },
+  };
 }
 
 const LIGHTBULB_PATH = 'M11.3931 1.88021C10.78 1.37593 10.062 1.01489 9.29157 0.823438C8.52113 0.631981 7.71767 0.614934 6.9398 0.773542C5.90405 0.982756 4.95379 1.49492 4.20959 2.24506C3.46538 2.9952 2.96078 3.9495 2.7598 4.98688C2.61303 5.76469 2.6397 6.56531 2.83791 7.33163C3.03611 8.09795 3.40097 8.8111 3.90647 9.42021C4.37559 9.94959 4.64449 10.6266 4.66647 11.3335V13.3335C4.66647 13.864 4.87718 14.3727 5.25225 14.7478C5.62732 15.1228 6.13603 15.3335 6.66647 15.3335H9.33313C9.86356 15.3335 10.3723 15.1228 10.7473 14.7478C11.1224 14.3727 11.3331 13.864 11.3331 13.3335V11.4602C11.3555 10.6797 11.6423 9.92983 12.1465 9.33354C13.0299 8.24073 13.4463 6.84342 13.3052 5.44529C13.1642 4.04716 12.477 2.7612 11.3931 1.86687V1.88021ZM9.9998 13.3335C9.9998 13.5104 9.92956 13.6799 9.80454 13.8049C9.67951 13.93 9.50994 14.0002 9.33313 14.0002H6.66647C6.48965 14.0002 6.32009 13.93 6.19506 13.8049C6.07004 13.6799 5.9998 13.5104 5.9998 13.3335V12.6669H9.9998V13.3335ZM11.1131 8.50688C10.4428 9.30194 10.0517 10.2949 9.9998 11.3335H8.66647V9.33354C8.66647 9.15673 8.59623 8.98716 8.4712 8.86214C8.34618 8.73711 8.17661 8.66688 7.9998 8.66688C7.82299 8.66688 7.65342 8.73711 7.52839 8.86214C7.40337 8.98716 7.33313 9.15673 7.33313 9.33354V11.3335H5.9998C5.98221 10.3123 5.60443 9.33005 4.93313 8.56021C4.49023 8.02954 4.19239 7.39316 4.06867 6.71311C3.94495 6.03306 3.99957 5.33255 4.22719 4.6799C4.45481 4.02724 4.84768 3.4447 5.36748 2.98909C5.88728 2.53348 6.51627 2.22034 7.19313 2.08021C7.77483 1.96044 8.37591 1.9717 8.95271 2.11319C9.52952 2.25467 10.0676 2.52282 10.5278 2.89818C10.9881 3.27353 11.359 3.74666 11.6136 4.28322C11.8682 4.81978 12.0001 5.4063 11.9998 6.00021C12.0047 6.91345 11.6912 7.79985 11.1131 8.50688Z';
@@ -1749,7 +1811,7 @@ export function activate(host) {
     agentStatus,
     watchUnread(loadConversations),
     watchThemeColor(),
-    installableApp(),
+    installableApp(host),
     quietActivity,
   ];
   function each(method, ...args) {

@@ -147,3 +147,81 @@ test("draws Canvas's icon as PNGs where the browser can", async (t) => {
     'data:image/png;base64,180',
   );
 });
+
+test('adds New chat, Conversations and Settings shortcuts, and reuses the open window', async (t) => {
+  const page = setupPage(t, { head: HEAD, body: BODY, settings: ON });
+  page.window.__reactRouterContext = { basename: '/canvas' };
+  await activateExtension(page, fakeHost());
+
+  const app = manifest(page);
+  assert.deepEqual(app.shortcuts, [
+    { name: 'New chat', url: 'https://canvas.test/canvas/conversations' },
+    {
+      name: 'Conversations',
+      url: 'https://canvas.test/canvas/conversations?openhands-extras=latest',
+    },
+    { name: 'Settings', url: 'https://canvas.test/canvas/settings' },
+  ]);
+  assert.deepEqual(app.launch_handler, { client_mode: ['focus-existing', 'auto'] });
+});
+
+// A host whose latest conversation is `latest`, or none.
+function latestHost(latest) {
+  const host = fakeHost();
+  host.agentServer.request = async ({ path }) => {
+    host.requests.push(path);
+    return { items: latest ? [{ id: latest }] : [] };
+  };
+  return host;
+}
+
+test('the Conversations shortcut opens the latest conversation', async (t) => {
+  const page = setupPage(t, {
+    url: 'https://canvas.test/conversations?openhands-extras=latest',
+    head: HEAD,
+    body: BODY,
+    settings: ON,
+  });
+  const host = latestHost('AB-C');
+  await activateExtension(page, host);
+
+  assert.deepEqual(host.requests, [
+    '/api/conversations/search?limit=1&sort_order=UPDATED_AT_DESC',
+  ]);
+  assert.deepEqual(host.navigations, ['/conversations/abc']);
+});
+
+test('the Conversations shortcut opens the home without conversations', async (t) => {
+  const page = setupPage(t, {
+    url: 'https://canvas.test/conversations?openhands-extras=latest',
+    head: HEAD,
+    body: BODY,
+    settings: ON,
+  });
+  const host = latestHost(null);
+  await activateExtension(page, host);
+
+  assert.deepEqual(host.navigations, ['/conversations']);
+});
+
+test('takes launches into the open window, under the base path', async (t) => {
+  const page = setupPage(t, { head: HEAD, body: BODY, settings: ON });
+  page.window.__reactRouterContext = { basename: '/canvas' };
+  let consumer = null;
+  page.window.launchQueue = { setConsumer: (next) => (consumer = next) };
+  const host = latestHost('AB-C');
+  const dispose = await activateExtension(page, host);
+
+  consumer({ targetURL: 'https://canvas.test/canvas/settings' });
+  consumer({ targetURL: 'https://canvas.test/canvas/conversations?openhands-extras=latest' });
+  await flush();
+  assert.deepEqual(host.navigations, ['/settings', '/conversations/abc']);
+
+  await page.changeSettings({});
+  consumer({ targetURL: 'https://canvas.test/canvas/settings' });
+  assert.equal(host.navigations.length, 2);
+
+  dispose();
+  consumer({ targetURL: 'https://canvas.test/canvas/settings' });
+  assert.equal(host.navigations.length, 2);
+});
