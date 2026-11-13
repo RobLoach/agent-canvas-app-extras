@@ -64,6 +64,19 @@ test('Alt+↑ and Alt+↓ open the previous and next conversation', async (t) =>
   assert.deepEqual(host.navigations, [`/conversations/${A}?backend=local`]);
 });
 
+test('Alt+↑ and Alt+↓ work from the message box too, but Alt+N does not', async (t) => {
+  const { page, host } = await start(t, {
+    path: `/conversations/${A}`,
+    body: BODY,
+    settings: ON,
+  });
+  const composer = page.document.querySelector('[data-testid="chat-input"]');
+  assert.ok(press(page, 'ArrowDown', { altKey: true }, composer).defaultPrevented);
+  assert.equal(press(page, 'Dead', { altKey: true, code: 'KeyN' }, composer).defaultPrevented, false);
+
+  assert.deepEqual(host.navigations, [`/conversations/${B}?backend=local`]);
+});
+
 test('Alt+N starts a new chat, on any keyboard layout', async (t) => {
   const { page, host } = await start(t, { body: BODY, settings: ON });
   // As on a Mac, where ⌥N types a dead key.

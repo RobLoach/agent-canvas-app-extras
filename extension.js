@@ -394,7 +394,7 @@ const SWITCHES = [
     group: 'Chat',
     label: 'Keyboard shortcuts',
     description:
-      'Press ? to list them: / focuses the message box, Alt+↑ and Alt+↓ open the previous or next conversation, and Alt+N starts a new chat.',
+      'Press ? to list them: / focuses the message box, Alt+↑ and Alt+↓ open the previous or next conversation, even from the message box, and Alt+N starts a new chat.',
   },
   {
     key: 'tabStatus',
@@ -2042,15 +2042,18 @@ function keyboardShortcuts(host) {
     if (next) host.navigate(`/${(next.pathname + next.search).slice(basePath.length)}`);
   }
 
-  function actionFor(event) {
+  // Alt+↑ and Alt+↓ work in the message box too, so you can move on from a
+  // conversation as you write; the others type text there.
+  function actionFor(event, inField) {
     if (event.ctrlKey || event.metaKey) return null;
     if (event.altKey) {
       if (event.shiftKey) return null;
       if (event.key === 'ArrowUp') return () => openNeighbour(-1);
       if (event.key === 'ArrowDown') return () => openNeighbour(1);
-      if (event.code === 'KeyN') return () => host.navigate('/conversations');
+      if (event.code === 'KeyN' && !inField) return () => host.navigate('/conversations');
       return null;
     }
+    if (inField) return null;
     if (event.key === '?') return openHelp;
     if (event.key === '/' && document.querySelector(COMPOSER)) return focusComposer;
     return null;
@@ -2067,8 +2070,8 @@ function keyboardShortcuts(host) {
       return;
     }
     if (!settings.keyboardShortcuts || event.defaultPrevented || event.isComposing) return;
-    if (typing(event.target) || canvasDialogOpen()) return;
-    const action = actionFor(event);
+    if (canvasDialogOpen()) return;
+    const action = actionFor(event, typing(event.target));
     if (!action) return;
     event.preventDefault();
     action();
