@@ -19,8 +19,6 @@ const VIEWING_KEY = 'openhands-extras:viewing';
 // How many conversations' read times are kept.
 const READ_LIMIT = 500;
 const SECTION_ID = 'openhands-extras-settings';
-const WIDE_STYLE_ID = 'openhands-extras-wide-canvas';
-const MOBILE_STYLE_ID = 'openhands-extras-mobile-fixes';
 const TABLES_STYLE_ID = 'openhands-extras-responsive-tables';
 const TABLE_ATTR = 'data-extras-table';
 const THEME_META_ID = 'openhands-extras-theme-color';
@@ -488,7 +486,6 @@ const SAFE_AREA_CSS = `[data-testid="root-layout"]:not(.pt-7) {
   padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px)
     env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
 }`;
-const VIEWPORT_FIT = 'viewport-fit=cover';
 // Icons as [size, purpose]: maskable ones keep the tile in the middle 80%,
 // which launchers may crop to a circle.
 const PNG_ICONS = [
@@ -496,7 +493,6 @@ const PNG_ICONS = [
   [512, 'any'],
   [512, 'maskable'],
 ];
-const TOUCH_ICON_SIZE = 180;
 // Shortcuts on the installed app's icon, by path under Canvas's base path.
 // /conversations is Canvas's own home, which / may redirect from.
 const SHORTCUTS = [
@@ -574,7 +570,7 @@ function installableApp(host) {
       }));
       const ok = drawn.every(({ src }) => src);
       pngs = ok ? drawn : [];
-      if (ok) touchIcon = pngIcon(image, TOUCH_ICON_SIZE, 'any');
+      if (ok) touchIcon = pngIcon(image, 180, 'any');
       apply();
     });
   }
@@ -584,7 +580,7 @@ function installableApp(host) {
       viewport = document.head.querySelector('meta[name="viewport"]');
       viewportContent = viewport?.getAttribute('content') ?? null;
       if (viewportContent?.includes('viewport-fit')) viewport = null;
-      viewport?.setAttribute('content', `${viewportContent}, ${VIEWPORT_FIT}`);
+      viewport?.setAttribute('content', `${viewportContent}, viewport-fit=cover`);
     } else if (!on && viewport) {
       viewport.setAttribute('content', viewportContent);
       viewport = null;
@@ -1145,7 +1141,6 @@ const pageHref = (name, page) => `/extensions/${name}/${page}`;
 const SIDEBAR_STYLE_ID = 'openhands-extras-sidebar';
 // Customize's pages, whose menu gets the settings page's link.
 const CUSTOMIZE_PAGE = /\/(?:customize|mcp|skills|plugins|apps)\/?$/;
-const APPS_LINK = '[data-testid="sidebar-extensions-/apps"]';
 
 // Class strings mirror Canvas's sidebarNavRowClassName() and
 // SIDEBAR_ROW_INTERACTIVE_CLASS (sidebar-layout.ts), and its Customize menu
@@ -1236,7 +1231,7 @@ function watchCustomizeMenu(host) {
   const ours = () => document.querySelectorAll('[data-testid="sidebar-extensions-extras"]');
   function place() {
     if (!CUSTOMIZE_PAGE.test(location.pathname)) return;
-    for (const apps of document.querySelectorAll(APPS_LINK)) {
+    for (const apps of document.querySelectorAll('[data-testid="sidebar-extensions-/apps"]')) {
       if (apps.nextElementSibling?.dataset.testid === 'sidebar-extensions-extras') continue;
       const link = navLink(host, path, 'Extras', NAV_ICONS.extras, false);
       link.dataset.testid = 'sidebar-extensions-extras';
@@ -1404,15 +1399,16 @@ const LARGER_TARGETS_CSS = `
   button, [role="button"], a[href], select, summary { min-height: 2.75rem; }
   button[aria-label], [role="button"][aria-label] { min-width: 2.75rem; }
 }`;
-const MOTION_STYLE_ID = 'openhands-extras-reduce-motion';
-const FOCUS_STYLE_ID = 'openhands-extras-clear-focus';
-const TARGETS_STYLE_ID = 'openhands-extras-larger-targets';
 
-// A switch that's only a style, added while it's on.
-const styleSwitch = (key, id, css) => ({
-  refresh: () => (settings[key] ? setStyle(id, css) : removeElement(id)),
-  dispose: () => removeElement(id),
-});
+// A switch that's only a style, added while it's on, as
+// openhands-extras-<key in kebab case>.
+function styleSwitch(key, css) {
+  const id = `openhands-extras-${key.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)}`;
+  return {
+    refresh: () => (settings[key] ? setStyle(id, css) : removeElement(id)),
+    dispose: () => removeElement(id),
+  };
+}
 
 // Stack a Markdown table while it's wider than its scroller, and put it back
 // once it fits, checked as the chat's width or the table changes, e.g. as
@@ -1553,7 +1549,6 @@ async function loadDataUrl(url) {
 // removed. Their original hrefs come back when it clears; the dot's own carry
 // a mark to tell them apart.
 const FAVICON_MARK = 'openhands-extras-badge';
-const isBadgeHref = (href) => !!href?.includes(FAVICON_MARK);
 
 function faviconBadge() {
   const originalHrefs = new WeakMap();
@@ -1574,7 +1569,7 @@ function faviconBadge() {
   function apply() {
     for (const link of links()) {
       const current = link.getAttribute('href');
-      if (!isBadgeHref(current)) originalHrefs.set(link, current);
+      if (!current?.includes(FAVICON_MARK)) originalHrefs.set(link, current);
       const next = href ?? originalHrefs.get(link);
       if (next) setAttribute(link, 'href', next);
     }
@@ -1634,21 +1629,6 @@ function tabTitle() {
     }
     applied = next === base ? null : { title: next, base };
     if (current !== next) setTitle(next);
-  };
-}
-
-// One badge for the whole installed app, which only shows outside a browser
-// tab.
-function appIconBadge() {
-  let shown = null;
-  return function show(count) {
-    if (count === shown) return;
-    shown = count;
-    const { navigator } = window;
-    const call = count
-      ? navigator.setAppBadge?.(count)
-      : navigator.clearAppBadge?.();
-    call?.catch(() => {});
   };
 }
 
@@ -1745,9 +1725,8 @@ function throttle(task, gap) {
   return {
     request,
     // Run without waiting out the gap, e.g. as settings change, instead of
-    // the run that was waiting for it.
-    // Calls at the same moment, e.g. from every feature as settings change,
-    // make one run.
+    // the run that was waiting for it. Calls at the same moment, e.g. from
+    // every feature, make one run.
     now() {
       clearTimeout(trailing);
       trailing = 0;
@@ -1776,7 +1755,8 @@ function watchAgentStatus(host, loadConversations, checks, onRender) {
   const conversations = new Map();
   const favicon = faviconBadge();
   const title = tabTitle();
-  const appBadge = appIconBadge();
+  // The installed app's badge, as last set.
+  let appBadge = null;
   let openId = null;
   // Conversations waiting for confirmation anywhere, from the Agent Server,
   // and when that was last fetched.
@@ -1840,7 +1820,12 @@ function watchAgentStatus(host, loadConversations, checks, onRender) {
         (tabCount ? STATUS_BADGES.waiting_for_confirmation.color : null),
       tabCount,
     );
-    appBadge(count);
+    if (count !== appBadge) {
+      appBadge = count;
+      const { navigator } = window;
+      const call = count ? navigator.setAppBadge?.(count) : navigator.clearAppBadge?.();
+      call?.catch(() => {});
+    }
     if (!disposed) onRender();
   }
 
@@ -2061,6 +2046,23 @@ const readState = {
   clear: () => writeJson(READ_KEY, null),
 };
 
+// The sidebar's conversations, in order: each card, its link, whose query
+// carries Canvas's backend, as in ?backend=…, and the conversation's key.
+// A card's link is read again only once it changes.
+const cardLinks = new WeakMap();
+function sidebarConversations() {
+  return [...document.querySelectorAll('[data-testid="conversation-card"]')].flatMap((card) => {
+    const href = card.closest('a[href]')?.getAttribute('href');
+    let known = cardLinks.get(card);
+    if (known?.href !== href) {
+      const url = href ? new URL(href, location.href) : null;
+      const id = url?.pathname.match(CONVERSATION_PATH)?.[1];
+      known = { href, url, key: id ? conversationKey(id) : null };
+      cardLinks.set(card, known);
+    }
+    return known.key ? [{ card, url: known.url, key: known.key }] : [];
+  });
+}
 
 // Mark the conversations in the sidebar that changed since you last had them
 // open, with a dot after their title. Their update times come from the Agent
@@ -2069,35 +2071,14 @@ const readState = {
 function watchUnread(loadConversations, checks) {
   // Each sidebar conversation's last update, by key, in ms.
   const updated = new Map();
-  // Each card's link, and the conversation it's for, read again only if the
-  // link changes.
-  const cardKeys = new WeakMap();
   // What you've read, as stored, loaded again when another window changes it.
   let state = null;
   let active = false;
   let disposed = false;
 
-  const cards = () =>
-    [...document.querySelectorAll('[data-testid="conversation-card"]')]
-      .map((card) => {
-        const href = card.closest('a[href]')?.getAttribute('href');
-        let known = cardKeys.get(card);
-        if (known?.href !== href) {
-          // Their links carry the backend, as in ?backend=…
-          const path = href && new URL(href, location.href).pathname;
-          const id = path?.match(CONVERSATION_PATH)?.[1];
-          known = { href, key: id && conversationKey(id) };
-          cardKeys.set(card, known);
-        }
-        return known.key && { card, key: known.key };
-      })
-      .filter(Boolean);
 
   // The open conversation is read while you're looking at it.
-  const openKey = () => {
-    const id = openConversationId();
-    return id && !away() ? conversationKey(id) : null;
-  };
+  const openKey = () => (away() ? null : openConversationId());
 
   function render() {
     const open = openKey();
@@ -2105,7 +2086,7 @@ function watchUnread(loadConversations, checks) {
       state.seen[open] = updated.get(open);
       readState.save(state);
     }
-    for (const { card, key } of cards()) {
+    for (const { card, key } of sidebarConversations()) {
       const at = updated.get(key);
       const unread =
         !!state &&
@@ -2130,7 +2111,7 @@ function watchUnread(loadConversations, checks) {
 
   async function check() {
     if (!active || document.hidden) return;
-    const keys = [...new Set(cards().map(({ key }) => key))];
+    const keys = [...new Set(sidebarConversations().map(({ key }) => key))];
     if (keys.length) {
       try {
         const infos = await loadConversations(keys);
@@ -2288,16 +2269,12 @@ function keyboardShortcuts(host) {
   // The sidebar's conversations, in order, from the open one, by their own
   // links, which carry Canvas's backend.
   function openNeighbour(step) {
+    const conversations = sidebarConversations();
+    if (!conversations.length) return;
+    const index = conversations.findIndex(({ key }) => key === openConversationId());
+    const next =
+      conversations[index === -1 ? (step > 0 ? 0 : conversations.length - 1) : index + step]?.url;
     const basePath = new URL(canvasBase()).pathname;
-    const links = [...document.querySelectorAll('[data-testid="conversation-card"]')]
-      .map((card) => card.closest('a[href]')?.getAttribute('href'))
-      .filter(Boolean)
-      .map((href) => new URL(href, location.href))
-      .filter((url) => CONVERSATION_PATH.test(url.pathname));
-    if (!links.length) return;
-    const keys = links.map((url) => conversationKey(url.pathname.match(CONVERSATION_PATH)[1]));
-    const index = keys.indexOf(openConversationId());
-    const next = links[index === -1 ? (step > 0 ? 0 : links.length - 1) : index + step];
     if (next) host.navigate(`/${(next.pathname + next.search).slice(basePath.length)}`);
   }
 
@@ -2671,12 +2648,12 @@ export function activate(host) {
     watchCustomizeMenu(host),
     sidebarLinks(host.extension.name),
     settingsView,
-    styleSwitch('wideCanvas', WIDE_STYLE_ID, WIDE_CANVAS_CSS),
-    styleSwitch('mobileFixes', MOBILE_STYLE_ID, MOBILE_FIXES_CSS),
+    styleSwitch('wideCanvas', WIDE_CANVAS_CSS),
+    styleSwitch('mobileFixes', MOBILE_FIXES_CSS),
     fontSize(),
-    styleSwitch('reduceMotion', MOTION_STYLE_ID, REDUCE_MOTION_CSS),
-    styleSwitch('clearFocus', FOCUS_STYLE_ID, CLEAR_FOCUS_CSS),
-    styleSwitch('largerTargets', TARGETS_STYLE_ID, LARGER_TARGETS_CSS),
+    styleSwitch('reduceMotion', REDUCE_MOTION_CSS),
+    styleSwitch('clearFocus', CLEAR_FOCUS_CSS),
+    styleSwitch('largerTargets', LARGER_TARGETS_CSS),
     watchResponsiveTables(),
     agentStatus,
     watchUnread(loadConversations, checks),
