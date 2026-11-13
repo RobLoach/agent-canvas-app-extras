@@ -1765,7 +1765,6 @@ function watchAgentStatus(host, loadConversations, checks, onRender) {
   // and when that was last fetched.
   let waiting = 0;
   let countedAt = -Infinity;
-  let poll = 0;
   let disposed = false;
   // The settings that need statuses, as last applied.
   let statusSettings;
@@ -1934,20 +1933,14 @@ function watchAgentStatus(host, loadConversations, checks, onRender) {
       if (disposed) return;
       render();
     }
-    schedulePoll();
   }
 
   // Poll while a run is going: runs you navigated away from don't re-render
   // this page, and a run's last event can land between checks. Poll while
   // counting too, for runs started elsewhere. Otherwise, page changes and
   // coming back to the tab trigger checks.
-  function schedulePoll() {
-    clearTimeout(poll);
-    const running = [...conversations.values()].some((entry) =>
-      ACTIVE_STATUSES.has(entry.status),
-    );
-    poll = running || counting() ? setTimeout(checks.request, CHECK_MS) : 0;
-  }
+  const polling = () =>
+    counting() || [...conversations.values()].some((entry) => ACTIVE_STATUSES.has(entry.status));
 
   // The conversation this window shows while it has focus, shared so other
   // windows following it don't notify you about it.
@@ -1990,6 +1983,7 @@ function watchAgentStatus(host, loadConversations, checks, onRender) {
 
   return {
     check,
+    polling,
     statusOf: (id) => conversations.get(id)?.status ?? null,
     onDomChange() {
       if (watching()) checks.request();
@@ -2017,8 +2011,6 @@ function watchAgentStatus(host, loadConversations, checks, onRender) {
     dispose() {
       disposed = true;
       headObserver.disconnect();
-      checks.cancel();
-      clearTimeout(poll);
       document.removeEventListener('visibilitychange', onReturn);
       window.removeEventListener('focus', onReturn);
       window.removeEventListener('blur', shareViewing);
@@ -2065,7 +2057,6 @@ function watchUnread(loadConversations, checks) {
   const cardKeys = new WeakMap();
   // What you've read, as stored, loaded again when another window changes it.
   let state = null;
-  let poll = 0;
   let active = false;
   let disposed = false;
 
@@ -2142,8 +2133,6 @@ function watchUnread(loadConversations, checks) {
       }
       render();
     }
-    clearTimeout(poll);
-    poll = setTimeout(checks.request, CHECK_MS);
   }
 
   function onVisibility() {
@@ -2156,6 +2145,7 @@ function watchUnread(loadConversations, checks) {
 
   return {
     check,
+    polling: () => active && !document.hidden,
     refresh() {
       const on = settings.unreadMarkers && !disposed;
       if (on === active) return;
@@ -2165,7 +2155,6 @@ function watchUnread(loadConversations, checks) {
         checks.now();
         return;
       }
-      clearTimeout(poll);
       readState.clear();
       state = null;
       render();
@@ -2185,8 +2174,6 @@ function watchUnread(loadConversations, checks) {
       disposed = true;
       active = false;
       state = null;
-      checks.cancel();
-      clearTimeout(poll);
       document.removeEventListener('visibilitychange', onVisibility);
       window.removeEventListener('focus', render);
       render();
@@ -2674,10 +2661,15 @@ export function activate(host) {
   // The status and unread checks run together, so their loads share one
   // request.
   const loadConversations = conversationLoader(host);
-  const checks = throttle(
-    () => Promise.allSettled(features.map((feature) => feature.check?.())),
-    CHECK_MS,
-  );
+  // Checks poll while any feature wants them to.
+  let poll = 0;
+  const checks = throttle(async () => {
+    await Promise.allSettled(features.map((feature) => feature.check?.()));
+    clearTimeout(poll);
+    poll = !disposed && features.some((feature) => feature.polling?.())
+      ? setTimeout(checks.request, CHECK_MS)
+      : 0;
+  }, CHECK_MS);
   const quietActivity = watchQuietActivity((id) => agentStatus.statusOf(id));
   const agentStatus = watchAgentStatus(host, loadConversations, checks, () =>
     quietActivity.onStatus(),
@@ -2732,6 +2724,8 @@ export function activate(host) {
     disposed = true;
     if (window[INSTANCE] === dispose) delete window[INSTANCE];
     observer.disconnect();
+    checks.cancel();
+    clearTimeout(poll);
     for (const unregister of unregisterPages) unregister?.();
     window.removeEventListener('storage', onStorage);
     for (const type of ['pointerdown', 'keydown']) {
