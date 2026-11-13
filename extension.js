@@ -73,10 +73,9 @@ const MOBILE_FIXES_CSS = `
 }`;
 
 // Canvas's Markdown tables, each in a scroller that lets it run wider than
-// the chat. Basic Table marks a table it stacks with .bt, and each cell with
-// its column's heading in data-th. Its own styles are written for plain
-// tables, so these also undo Canvas's widths, borders and nowrap, and rule a
-// line between rows.
+// the chat. A stacked table is marked .bt, and each cell carries its column's
+// heading in data-th. These undo Canvas's widths, borders and nowrap, and
+// rule a line between rows.
 const MARKDOWN_TABLE = '[data-testid="markdown-table-scroll"] > table';
 const RESPONSIVE_TABLES_CSS = `
 [${TABLE_ATTR}].bt { width: 100%; min-width: 0; }
@@ -1391,46 +1390,67 @@ const styleSwitch = (key, id, css) => ({
   dispose: () => removeElement(id),
 });
 
-// Basic Table, embedded at the end of this file, stacks a Markdown table while
-// it's wider than its scroller, and puts it back once it fits. It checks on
-// window resizes, and is restarted here as the chat's width or the table
-// changes, e.g. as rows stream in, which also labels the new cells. It only
-// adds attributes and a class, leaving the nodes React owns where they are.
+// Stack a Markdown table while it's wider than its scroller, and put it back
+// once it fits, checked as the chat's width or the table changes, e.g. as
+// rows stream in, which also labels the new cells. Only attributes and a
+// class are added, leaving the nodes React owns where they are.
+const TABLE_STACKED = 'bt';
+
+// An element's content width, as Canvas sizes boxes by their border box.
+function contentWidth(element) {
+  const style = window.getComputedStyle(element);
+  const edges = ['Left', 'Right'].reduce(
+    (sum, side) =>
+      sum + (parseFloat(style[`border${side}Width`]) || 0) + (parseFloat(style[`padding${side}`]) || 0),
+    0,
+  );
+  return parseFloat(style.width) - edges;
+}
+
+function fitTable(table) {
+  const headings = [...(table.tHead?.rows[0]?.cells ?? [])].map((cell) => cell.textContent.trim());
+  for (const body of table.tBodies) {
+    for (const row of body.rows) {
+      [...row.cells].forEach((cell, index) => {
+        if (index < headings.length) setAttribute(cell, 'data-th', headings[index]);
+      });
+    }
+  }
+  table.classList.remove(TABLE_STACKED);
+  if (table.offsetWidth > contentWidth(table.parentElement)) table.classList.add(TABLE_STACKED);
+}
+
 function watchResponsiveTables() {
-  // Each table's Basic Table, and the scroller it's measured against.
+  // Each table's scroller, which it's measured against.
   const tables = new Map();
   // Tables to check again on the next frame: ResizeObserver reports an error
   // when its callback resizes what it watches.
   const pending = new Set();
   let observer = null;
   let frame = 0;
-  let ids = 0;
 
   function track(table) {
-    const id = String((ids += 1));
-    table.setAttribute(TABLE_ATTR, id);
-    const basic = new basictable(`table[${TABLE_ATTR}="${id}"]`, {
-      forceResponsive: false,
-      contentWrap: false,
-    });
+    table.setAttribute(TABLE_ATTR, '');
     const scroller = table.parentElement;
-    tables.set(table, { basic, scroller });
+    tables.set(table, scroller);
+    fitTable(table);
     observer?.observe(table);
     observer?.observe(scroller);
   }
 
   function untrack(table) {
-    const { basic, scroller } = tables.get(table);
+    const scroller = tables.get(table);
     tables.delete(table);
-    basic.destroy();
+    table.classList.remove(TABLE_STACKED);
     table.removeAttribute(TABLE_ATTR);
+    for (const cell of table.querySelectorAll('[data-th]')) cell.removeAttribute('data-th');
     observer?.unobserve(table);
     observer?.unobserve(scroller);
   }
 
   function recheck() {
     frame = 0;
-    for (const table of pending) tables.get(table)?.basic.restart();
+    for (const table of pending) if (tables.has(table)) fitTable(table);
     pending.clear();
   }
 
@@ -2750,239 +2770,3 @@ export function activate(host) {
   window[INSTANCE] = dispose;
   return dispose;
 }
-
-// Basic Table 2.0.5, embedded unchanged from the basictable package's
-// src/js/basictable.js, as Canvas loads an app from a single file. A test
-// checks it against the package; update both together.
-// BEGIN basictable
-/*
- * @license Basictable - Vanilla JS | MIT | Jerry Low | https://www.github.com/jerrylow/basictable
- */
-
-'use strict'
-
-class basictable { // eslint-disable-line no-unused-vars
-  constructor (tableSel, options = {}) {
-    const _defaultOptions = {
-      breakpoint: null,
-      containerBreakpoint: null,
-      contentWrap: true,
-      forceResponsive: true,
-      noResize: false,
-      tableWrap: false,
-      showEmptyCells: false,
-      header: true
-    }
-
-    this.tableSel = tableSel
-    this.options = { ..._defaultOptions, ...options }
-
-    if (this.options.breakpoint === null && this.options.containerBreakpoint === null) {
-      this.options.breakpoint = 568
-    }
-
-    this._getTables()
-    this._setup()
-  }
-
-  // @TODO: Convert to private class fields when supported.
-  _getTables () {
-    this.tables = document.querySelectorAll(this.tableSel)
-  }
-
-  _setup () {
-    this.tables.forEach(table => {
-      table.setAttribute('data-bt-active', true)
-
-      const headings = []
-
-      if (this.options.tableWrap) {
-        const tableWrapper = document.createElement('div')
-        tableWrapper.classList.add('bt-wrapper')
-        table.parentNode.insertBefore(tableWrapper, table)
-        tableWrapper.appendChild(table)
-      }
-
-      if (this.options.header) {
-        let format = ''
-
-        if (table.querySelectorAll('thead tr th').length) {
-          format = 'thead th'
-        } else if (table.querySelectorAll('tbody tr th').length) {
-          format = 'tbody tr th'
-        } else if (table.querySelectorAll('th').length) {
-          format = 'tr:first-of-type th'
-        } else {
-          format = 'tr:first-of-type td'
-        }
-
-        table.querySelectorAll(format).forEach(heading => {
-          const colspan = parseInt(heading.getAttribute('colspan'), 10) || 1
-          const parentRow = heading.closest('tr')
-          const row = [].indexOf.call(parentRow.parentElement.children, parentRow)
-
-          if (!headings[row]) {
-            headings[row] = []
-          }
-
-          for (let i = 0; i < colspan; i++) {
-            headings[row].push(heading)
-          }
-        })
-
-        // Table Body
-        table.querySelectorAll('tbody tr').forEach(row => this._setupRow(row, headings))
-
-        // Table Footer
-        table.querySelectorAll('tfoot tr').forEach(row => this._setupRow(row, headings))
-      }
-
-      if (!this.options.noResize) {
-        this._check(table)
-      }
-    })
-
-    if (!this.options.noResize) {
-      this._tableResizeEvent = () => this._resize()
-      window.addEventListener('resize', this._tableResizeEvent)
-    }
-  }
-
-  _setupRow (row, headings) {
-    row.querySelectorAll(':scope > *').forEach(cell => {
-      if ((cell.innerHTML.trim() === '' || cell.innerHTML === '&nbsp;') && this.options.showEmptyCells) {
-        cell.classList('bt-hide')
-      } else {
-        const cellIndex = [].indexOf.call(cell.parentElement.children, cell)
-
-        let headingText = ''
-
-        for (let j = 0; j < headings.length; j++) {
-          if (j !== 0) {
-            headingText += ': '
-          }
-
-          const heading = headings[j][cellIndex]
-          headingText += heading.textContent
-        }
-
-        cell.setAttribute('data-th', headingText)
-
-        // Wrap Cell Content
-        const cellInnerWrapper = document.createElement('span')
-        cellInnerWrapper.classList.add('bt-content')
-
-        if (this.options.contentWrap && cell.firstChild !== cellInnerWrapper) {
-          cell.appendChild(cellInnerWrapper)
-          while (cell.firstChild !== cellInnerWrapper) {
-            cellInnerWrapper.appendChild(cell.firstChild)
-          }
-        }
-      }
-    })
-  }
-
-  _getInnerWidth (el) {
-    const computedStyle = window.getComputedStyle(el);
-    const border = parseFloat(computedStyle.borderLeft) + parseFloat(computedStyle.borderRight);
-    const padding = parseFloat(computedStyle.paddingLeft) + parseFloat(computedStyle.paddingRight);
-
-    return parseFloat(computedStyle.width) - (border + padding);
-  }
-
-  _check (table) {
-    // Only change when table is larger than parent if force
-    // responsive is turned off.
-    if (!this.options.forceResponsive) {
-      table.classList.remove('bt')
-      const tableSize = table.offsetWidth;
-
-      if (tableSize > this._getInnerWidth(table.parentElement)) {
-        this._start(table)
-      } else {
-        this._end(table)
-      }
-    } else {
-      if ((this.options.breakpoint !== null && window.innerWidth <= this.options.breakpoint) || (this.options.containerBreakpoint !== null && table.parentElement.offsetWidth <= this.options.containerBreakpoint)) {
-        this._start(table)
-      } else {
-        this._end(table)
-      }
-    }
-  }
-
-  _start (table) {
-    table.classList.add('bt')
-
-    if (!this.options.header) {
-      table.classList.add('bt--no-header')
-    }
-
-    if (this.options.tableWrap) {
-      table.closest('.bt-wrapper').classList.add('active')
-    }
-  }
-
-  _end (table) {
-    table.classList.remove('bt', 'bt--no-header')
-
-    if (this.options.tableWrap) {
-      table.closest('.bt-wrapper').classList.remove('active')
-    }
-  };
-
-  _resize (table) {
-    this.tables.forEach(table => {
-      if (table.getAttribute('data-bt-active')) {
-        this._check(table)
-      }
-    })
-  };
-
-  start () {
-    this.tables.forEach(table => {
-      this._start(table)
-    })
-  }
-
-  stop () {
-    this.tables.forEach(table => {
-      this._end(table)
-    })
-  }
-
-  restart () {
-    this.destroy()
-    this._getTables()
-    this._setup()
-  }
-
-  destroy () {
-    this.tables.forEach(table => {
-      if (table.getAttribute('data-bt-active')) {
-        table.classList.remove('bt', 'bt--no-header')
-        table.removeAttribute('data-bt-active')
-        const cells = table.querySelectorAll('td')
-        cells.forEach(td => td.removeAttribute('data-th'))
-
-        if (this.options.contentWrap) {
-          cells.forEach(td => {
-            const content = td.querySelector('.bt-content')
-            if (content) {
-              td.innerHTML = content.innerHTML
-            }
-          })
-        }
-
-        if (this.options.tableWrap) {
-          table.parentNode.outerHTML = table.parentNode.innerHTML
-        }
-      }
-    })
-
-    if (!this.options.noResize) {
-      window.removeEventListener('resize', this._tableResizeEvent)
-    }
-  }
-};
-// END basictable
