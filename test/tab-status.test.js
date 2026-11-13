@@ -136,7 +136,7 @@ test('numbers the tab icon dot with the conversations that need you', async (t) 
   assert.match(href, />1<\/text>/);
 
   host.statuses[B] = 'running';
-  await page.wait(30_000);
+  await page.wait(20_000);
   assert.equal(iconColor(page), 'canvas');
 });
 

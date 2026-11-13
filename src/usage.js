@@ -1,4 +1,5 @@
-// The usage page.
+// The usage page: what the Agent Server's conversations cost, from the cost
+// of each of their LLM calls, over a period, by model and by conversation.
 
 import {
   el,
@@ -13,8 +14,6 @@ import { canvasLanguage, conversationKey } from './canvas.js';
 import { settings } from './settings.js';
 import { canvasLink, pageHref, SETTINGS_PAGE } from './pages.js';
 
-// The usage page: what the Agent Server's conversations cost, from the cost
-// of each of their LLM calls, over a period, by model and by conversation.
 // Tokens are each conversation's whole total, as the server doesn't date
 // them. It reads up to USAGE_PAGES pages of the latest conversations, once
 // per visit and on Refresh.

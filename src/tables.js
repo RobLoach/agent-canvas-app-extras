@@ -7,28 +7,24 @@ const TABLES_STYLE_ID = 'openhands-extras-responsive-tables';
 const TABLE_ATTR = 'data-extras-table';
 
 // Canvas's Markdown tables, each in a scroller that lets it run wider than
-// the chat. A stacked table is marked .bt, and each cell carries its column's
-// heading in data-th. These undo Canvas's widths, borders and nowrap, and
-// rule a line between rows.
+// the chat. A stacked table is marked with TABLE_STACKED, and each cell
+// carries its column's heading in data-th. These undo Canvas's widths,
+// borders and nowrap, and rule a line between rows.
 const MARKDOWN_TABLE = '[data-testid="markdown-table-scroll"] > table';
+const TABLE_STACKED = 'extras-stacked';
+const STACKED = `[${TABLE_ATTR}].${TABLE_STACKED}`;
 const RESPONSIVE_TABLES_CSS = `
-[${TABLE_ATTR}].bt { width: 100%; min-width: 0; }
-[${TABLE_ATTR}].bt thead, [${TABLE_ATTR}].bt tbody th { display: none; }
-[${TABLE_ATTR}].bt tbody td {
+${STACKED} { width: 100%; min-width: 0; }
+${STACKED} thead, ${STACKED} tbody th { display: none; }
+${STACKED} tbody td {
   display: flex; gap: 0.75rem; max-width: none; white-space: normal; border: none;
 }
-[${TABLE_ATTR}].bt tbody td::before {
+${STACKED} tbody td::before {
   content: attr(data-th); flex: 0 0 8em; font-weight: 600; overflow-wrap: anywhere;
 }
-[${TABLE_ATTR}].bt tbody tr + tr td:first-child {
+${STACKED} tbody tr + tr td:first-child {
   border-top: 1px solid color-mix(in srgb, currentColor 20%, transparent);
 }`;
-
-// Stack a Markdown table while it's wider than its scroller, and put it back
-// once it fits, checked as the chat's width or the table changes, e.g. as
-// rows stream in, which also labels the new cells. Only attributes and a
-// class are added, leaving the nodes React owns where they are.
-const TABLE_STACKED = 'bt';
 
 // An element's content width, as Canvas sizes boxes by their border box.
 function contentWidth(element) {
@@ -54,7 +50,11 @@ function fitTable(table) {
   if (table.offsetWidth > contentWidth(table.parentElement)) table.classList.add(TABLE_STACKED);
 }
 
-export function watchResponsiveTables() {
+export // Stack a Markdown table while it's wider than its scroller, and put it back
+// once it fits, checked as the chat's width or the table changes, e.g. as
+// rows stream in, which also labels the new cells. Only attributes and a
+// class are added, leaving the nodes React owns where they are.
+function watchResponsiveTables() {
   // Each table's scroller, which it's measured against.
   const tables = new Map();
   // Tables to check again on the next frame: ResizeObserver reports an error

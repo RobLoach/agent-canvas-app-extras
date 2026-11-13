@@ -357,7 +357,7 @@ export function watchAgentStatus(host, loadConversations, checks, onRender) {
     shared = id;
   }
 
-  // Coming back to the tab or window clears the finished/error/paused badges.
+  // Coming back to the tab or window clears the badges of ended or paused runs.
   function onReturn() {
     shareViewing();
     if (away() || !watching()) return;

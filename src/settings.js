@@ -9,8 +9,9 @@ import {
 } from './notifications.js';
 
 // A switch with options is a choice between them instead, starting at its
-// default. check() says why a switch can't work, e.g. after a permission was revoked;
-// enable(), which defaults to it, may also ask the browser for what it needs.
+// default. check() says why a switch can't work, e.g. after a permission was
+// revoked; enable(), which defaults to check(), may also ask the browser for
+// what it needs.
 // status is 'follow' for a feature that needs conversation statuses, and
 // 'count' for one that also needs how many conversations need your input.
 // The settings page lists them under their group, in this order.
@@ -120,7 +121,7 @@ export const SWITCHES = [
     group: 'App',
     label: 'Installable app',
     description:
-      "Let your browser install Canvas as an app, with its icon and a title bar in Canvas's colours, clear of notches and home indicators.",
+      "Let your browser install Canvas as an app, with New chat and Settings shortcuts and a title bar in Canvas's colours, clear of notches and home indicators.",
     check: installProblem,
   },
   {
@@ -135,7 +136,7 @@ export const SWITCHES = [
     group: 'App',
     label: 'Usage page',
     description:
-      'Add a Usage page to the sidebar, with what your conversations cost by day, model and conversation.',
+      'Add a Usage page to the sidebar, with what your conversations cost over a period, by model and by conversation.',
   },
 ];
 const DEFAULT_SETTINGS = Object.fromEntries(
