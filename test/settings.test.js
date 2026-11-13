@@ -13,7 +13,6 @@ const SETTINGS_URL = `https://canvas.test${SETTINGS_PATH}`;
 const MENU =
   '<div id="menu"><a data-testid="sidebar-extensions-/plugins" href="/plugins">Plugins</a><a data-testid="sidebar-extensions-/apps" href="/apps">Apps</a></div>';
 
-const section = (page) => page.document.getElementById('openhands-extras-settings');
 const switchFor = (page, key) =>
   page.document.querySelector(`[data-testid="extras-${key}-switch"]`);
 const hintFor = (page, key) =>
@@ -51,46 +50,13 @@ const SWITCH_KEYS = [
   'usagePage',
 ];
 
-test('links its card on Customize > Apps to the settings page', async (t) => {
+test('leaves its card on Customize > Apps as Canvas renders it', async (t) => {
   const page = setupPage(t, { body: CARDS });
-  const host = fakeHost();
-  const dispose = await activateExtension(page, host);
-
-  const card = page.document.getElementById('card');
-  assert.equal(card.querySelector('footer').previousElementSibling, section(page));
-  assert.equal(
-    page.document.querySelector('[data-testid="canvas-extension-card-demo-page"]')
-      .children.length,
-    2,
-  );
-  const link = section(page).querySelector('[data-testid="extras-open-settings"]');
-  assert.equal(link.getAttribute('href'), SETTINGS_URL);
-  link.click();
-  assert.deepEqual(host.navigations, [SETTINGS_PATH]);
-
-  dispose();
-  assert.equal(section(page), null);
-});
-
-test('stays out of the card on other pages', async (t) => {
-  const page = setupPage(t, { url: 'https://canvas.test/conversations/x', body: CARDS });
   await activateExtension(page, fakeHost());
   page.mutate();
   await flush();
 
-  assert.equal(section(page), null);
-});
-
-test('moves back above the footer when Canvas inserts before it', async (t) => {
-  const page = setupPage(t, { body: CARDS });
-  await activateExtension(page, fakeHost());
-
-  const footer = page.document.querySelector('#card > footer');
-  footer.before(page.document.createElement('section'));
-  await flush();
-
-  assert.equal(footer.previousElementSibling, section(page));
-  assert.equal(page.document.querySelectorAll('#openhands-extras-settings').length, 1);
+  assert.equal(page.document.getElementById('card').children.length, 3);
 });
 
 test("adds Extras under Apps in Customize's menu", async (t) => {

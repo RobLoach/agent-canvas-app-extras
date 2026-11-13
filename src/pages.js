@@ -1,16 +1,14 @@
-// The settings page, its place in Customize's menu and on this app's card,
-// and the switches it shows.
+// The settings page, its place in Customize's menu, and the switches it
+// shows.
 
 import {
   el,
-  FOCUS_RING,
   HAS_FOCUS_RING,
   OWN_ATTR,
   pageHeader,
   pageSection,
   pillClass,
   removeElement,
-  SECTION_ID,
   setStyle,
   textButton,
 } from './dom.js';
@@ -209,41 +207,6 @@ export function watchCustomizeMenu(host) {
     refresh: place,
     onDomChange: place,
     dispose: () => ours().forEach((link) => link.remove()),
-  };
-}
-
-// This app's card on Customize > Apps links to the settings page. React may
-// insert its own nodes before the card's footer later, so the link is placed
-// again whenever it's displaced.
-export function watchAppCard(host) {
-  const name = host.extension.name;
-  const cardSelector = `article[data-testid="canvas-extension-card-${name}"]`;
-  function place() {
-    // Skip the DOM search everywhere but Customize > Apps (e.g. while chatting).
-    if (!/\/apps\/?$/.test(location.pathname)) return;
-    const footer = document.querySelector(`${cardSelector} > footer`);
-    if (!footer || footer.previousElementSibling?.id === SECTION_ID) return;
-    removeElement(SECTION_ID);
-    const link = canvasLink(
-      host,
-      pageHref(name, SETTINGS_PAGE),
-      `w-fit rounded-sm text-sm text-link hover:underline ${FOCUS_RING}`,
-      'Extras settings',
-    );
-    link.dataset.testid = 'extras-open-settings';
-    const section = el(
-      'section',
-      'flex min-w-0 flex-col gap-1 border-t border-border pt-3',
-      link,
-      el('p', 'text-xs leading-relaxed text-tertiary-light', 'Turn its features on and off, also under Customize > Extras.'),
-    );
-    section.id = SECTION_ID;
-    footer.before(section);
-  }
-  return {
-    refresh: place,
-    onDomChange: place,
-    dispose: () => removeElement(SECTION_ID),
   };
 }
 
