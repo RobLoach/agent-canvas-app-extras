@@ -18,7 +18,7 @@ import {
 export const SWITCH_GROUPS = ['Chat', 'Status and notifications', 'Accessibility', 'App'];
 export const SWITCHES = [
   {
-    key: 'wideCanvas',
+    key: 'wideChat',
     group: 'Chat',
     label: 'Wide chat',
     description: 'Let the chat use the full width of the page.',
@@ -38,7 +38,7 @@ export const SWITCHES = [
       "Stack a table's cells under their headings while it's too wide for the chat.",
   },
   {
-    key: 'quietActivity',
+    key: 'collapseActivity',
     group: 'Chat',
     status: 'follow',
     label: 'Collapse agent activity',
@@ -71,7 +71,7 @@ export const SWITCHES = [
     enable: requestNotificationPermission,
   },
   {
-    key: 'confirmationSound',
+    key: 'notificationSounds',
     group: 'Status and notifications',
     status: 'follow',
     label: 'Notification sounds',
@@ -119,7 +119,7 @@ export const SWITCHES = [
       'Underline every link, not only on hover, and outline what has keyboard focus in a thick ring.',
   },
   {
-    key: 'largerTargets',
+    key: 'biggerTapTargets',
     group: 'Accessibility',
     label: 'Bigger tap targets',
     description:
@@ -154,22 +154,19 @@ const DEFAULT_SETTINGS = Object.fromEntries(
 
 export let settings = DEFAULT_SETTINGS;
 
-// Switches since merged into others turn those on.
-const MERGED_SWITCHES = { appBadge: 'tabStatus', themeColor: 'installableApp' };
-
+// Each switch's stored value, or its default where there's none, or it's
+// not one of its choices.
 export function loadSettings() {
-  const stored = { ...readJson(STORAGE_KEY, {}) };
-  for (const [old, key] of Object.entries(MERGED_SWITCHES)) {
-    if (stored[old]) stored[key] = true;
-    delete stored[old];
-  }
-  settings = { ...DEFAULT_SETTINGS, ...stored };
-  for (const item of SWITCHES) {
-    const value = settings[item.key];
-    if (item.options && !item.options.some(([option]) => option === value)) {
-      settings[item.key] = item.default;
-    }
-  }
+  const stored = readJson(STORAGE_KEY, {});
+  settings = Object.fromEntries(
+    SWITCHES.map((item) => {
+      const value = stored?.[item.key];
+      const valid = item.options
+        ? item.options.some(([option]) => option === value)
+        : typeof value === 'boolean';
+      return [item.key, valid ? value : DEFAULT_SETTINGS[item.key]];
+    }),
+  );
 }
 
 // Saves the settings, or with none, removes them, turning every feature off.

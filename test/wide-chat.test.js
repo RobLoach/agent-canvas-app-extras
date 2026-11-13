@@ -9,7 +9,7 @@ const BODY = `<div data-agent-server-ui>
 
 const wideSelector = (document) =>
   document
-    .getElementById('openhands-extras-wide-canvas')
+    .getElementById('openhands-extras-wide-chat')
     ?.textContent.split('{')[0]
     .trim();
 
@@ -21,7 +21,7 @@ test('Wide canvas is off by default', async (t) => {
 });
 
 test('Wide canvas widens the chat thread but not other max-w-200 columns', async (t) => {
-  const page = setupPage(t, { body: BODY, settings: { wideCanvas: true } });
+  const page = setupPage(t, { body: BODY, settings: { wideChat: true } });
   const dispose = await activateExtension(page, fakeHost());
 
   const selector = wideSelector(page.document);

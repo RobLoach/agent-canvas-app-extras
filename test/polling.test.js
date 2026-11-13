@@ -53,7 +53,7 @@ test('checks at most every 20 seconds, catching up after the gap', async (t) => 
 });
 
 test('does not check at all while no status switch is on', async (t) => {
-  const { page, host } = await openA(t, { wideCanvas: true }, 'running');
+  const { page, host } = await openA(t, { wideChat: true }, 'running');
   page.returnToTab();
   await page.check();
   await page.wait(60 * 60 * 1000);
@@ -62,11 +62,11 @@ test('does not check at all while no status switch is on', async (t) => {
 
 test('only checks at once for switches that need statuses', async (t) => {
   const { page, host } = await openA(t, { notifications: true }, 'idle');
-  await page.changeSettings({ notifications: true, wideCanvas: true });
-  await page.changeSettings({ notifications: true, wideCanvas: true, responsiveTables: true });
+  await page.changeSettings({ notifications: true, wideChat: true });
+  await page.changeSettings({ notifications: true, wideChat: true, responsiveTables: true });
   assert.equal(host.requests.length, 1);
 
-  await page.changeSettings({ notifications: true, wideCanvas: true, tabStatus: true });
+  await page.changeSettings({ notifications: true, wideChat: true, tabStatus: true });
   assert.deepEqual(host.requests.slice(1).sort(), [COUNT_PATH, `/api/conversations?ids=${A}`].sort());
 });
 

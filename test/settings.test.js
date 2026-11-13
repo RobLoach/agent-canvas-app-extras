@@ -34,18 +34,18 @@ async function openSettings(page, host = fakeHost()) {
 }
 
 const SWITCH_KEYS = [
-  'wideCanvas',
+  'wideChat',
   'focusedNewChat',
   'responsiveTables',
-  'quietActivity',
+  'collapseActivity',
   'keyboardShortcuts',
   'tabStatus',
   'notifications',
-  'confirmationSound',
+  'notificationSounds',
   'unreadMarkers',
   'reduceMotion',
   'clearFocus',
-  'largerTargets',
+  'biggerTapTargets',
   'installableApp',
   'mobileFixes',
   'usagePage',
@@ -111,19 +111,19 @@ test('redraws the switches when another tab changes the settings', async (t) => 
   const page = setupPage(t, { url: SETTINGS_URL });
   await openSettings(page);
 
-  await page.changeSettings({ wideCanvas: true });
-  assert.equal(switchFor(page, 'wideCanvas').checked, true);
+  await page.changeSettings({ wideChat: true });
+  assert.equal(switchFor(page, 'wideChat').checked, true);
 });
 
 test('saves and applies a switch', async (t) => {
   const page = setupPage(t, { url: SETTINGS_URL });
   await openSettings(page);
 
-  switchFor(page, 'wideCanvas').click();
+  switchFor(page, 'wideChat').click();
   await flush();
 
-  assert.equal(stored(page).wideCanvas, true);
-  assert.ok(page.document.getElementById('openhands-extras-wide-canvas'));
+  assert.equal(stored(page).wideChat, true);
+  assert.ok(page.document.getElementById('openhands-extras-wide-chat'));
 });
 
 test('turns notifications back off when the browser denies permission', async (t) => {
@@ -153,7 +153,7 @@ test('presents each setting as a switch, with a hint read out as it changes', as
   const page = setupPage(t, { url: SETTINGS_URL });
   await openSettings(page);
 
-  for (const key of ['wideCanvas', 'notifications']) {
+  for (const key of ['wideChat', 'notifications']) {
     const input = switchFor(page, key);
     assert.equal(input.getAttribute('role'), 'switch', key);
     assert.equal(input.closest('label').querySelector('div'), null, 'only phrasing content in a label');
@@ -163,7 +163,7 @@ test('presents each setting as a switch, with a hint read out as it changes', as
 });
 
 test('ignores a switch that finishes changing after the app is disabled', async (t) => {
-  const page = setupPage(t, { url: SETTINGS_URL, settings: { wideCanvas: true } });
+  const page = setupPage(t, { url: SETTINGS_URL, settings: { wideChat: true } });
   page.permission = 'default';
   let answer;
   page.window.Notification.requestPermission = () =>
@@ -181,24 +181,24 @@ test('ignores a switch that finishes changing after the app is disabled', async 
   dispose();
   answer();
   await flush();
-  assert.equal(page.document.getElementById('openhands-extras-wide-canvas'), null);
-  assert.deepEqual(stored(page), { wideCanvas: true });
+  assert.equal(page.document.getElementById('openhands-extras-wide-chat'), null);
+  assert.deepEqual(stored(page), { wideChat: true });
 });
 
 test('resets the settings, turning every feature off', async (t) => {
   const page = setupPage(t, {
     url: SETTINGS_URL,
-    settings: { wideCanvas: true, tabStatus: true },
+    settings: { wideChat: true, tabStatus: true },
   });
   await openSettings(page);
-  assert.ok(page.document.getElementById('openhands-extras-wide-canvas'));
+  assert.ok(page.document.getElementById('openhands-extras-wide-chat'));
 
   page.document.querySelector('[data-testid="extras-reset-settings"]').click();
   await flush();
 
   assert.equal(page.window.localStorage.getItem('openhands-extras:settings'), null);
-  assert.equal(page.document.getElementById('openhands-extras-wide-canvas'), null);
-  assert.equal(switchFor(page, 'wideCanvas').checked, false);
+  assert.equal(page.document.getElementById('openhands-extras-wide-chat'), null);
+  assert.equal(switchFor(page, 'wideChat').checked, false);
   assert.equal(switchFor(page, 'tabStatus').checked, false);
 });
 
@@ -223,24 +223,6 @@ test('a reset while the permission prompt is open keeps every switch off', async
   assert.equal(switchFor(page, 'notifications').checked, false);
 });
 
-test('turns on the switches that merged ones moved into', async (t) => {
-  const page = setupPage(t, {
-    url: SETTINGS_URL,
-    settings: { appBadge: true, themeColor: true },
-  });
-  await openSettings(page);
-
-  assert.equal(switchFor(page, 'tabStatus').checked, true);
-  assert.equal(switchFor(page, 'installableApp').checked, true);
-
-  switchFor(page, 'tabStatus').click();
-  await flush();
-  const saved = JSON.parse(page.window.localStorage.getItem('openhands-extras:settings'));
-  assert.equal(saved.tabStatus, false);
-  assert.equal(saved.installableApp, true);
-  assert.equal('appBadge' in saved || 'themeColor' in saved, false);
-});
-
 test('keeps redrawing after Canvas cleans up an earlier mount late', async (t) => {
   const page = setupPage(t, { url: SETTINGS_URL });
   const host = fakeHost();
@@ -254,8 +236,8 @@ test('keeps redrawing after Canvas cleans up an earlier mount late', async (t) =
   mount();
   first();
 
-  await page.changeSettings({ wideCanvas: true });
-  assert.equal(switchFor(page, 'wideCanvas').checked, true);
+  await page.changeSettings({ wideChat: true });
+  assert.equal(switchFor(page, 'wideChat').checked, true);
 });
 
 test('shows the keyboard shortcuts, and links back to Customize on small screens', async (t) => {

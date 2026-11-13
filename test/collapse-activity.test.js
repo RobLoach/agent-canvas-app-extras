@@ -12,7 +12,7 @@ const TIMEOUT =
   '<span class="flex-shrink-0"><svg data-testid="status-icon"></svg></span>';
 
 // Conversation A's chat, before the app starts.
-const openChat = (t, items, settings = { quietActivity: true }) =>
+const openChat = (t, items, settings = { collapseActivity: true }) =>
   setupPage(t, {
     url: `https://canvas.test/conversations/${A}`,
     body: `<div data-testid="chat-scroll-container">${items.join('')}</div>`,
@@ -26,7 +26,7 @@ const pulsing = (page) =>
 // What you'd see, top to bottom.
 const shown = (page) =>
   [...chat(page).querySelectorAll('[data-testid="generic-event-message-title"], .agent-message, [data-extras-thinking]')]
-    .filter((element) => !element.closest('[data-extras-quiet]:not([data-extras-shown])'))
+    .filter((element) => !element.closest('[data-extras-folded]:not([data-extras-shown])'))
     .map((element) => element.textContent.replace(/\s+/g, ' ').trim());
 
 test('folds Running and Reading entries into Thinking, keeping the rest', async (t) => {
@@ -53,7 +53,7 @@ test('folds Running and Reading entries into Thinking, keeping the rest', async 
     'Thinking',
     'All done.',
   ]);
-  assert.ok(page.document.getElementById('openhands-extras-quiet-activity'));
+  assert.ok(page.document.getElementById('openhands-extras-collapse-activity'));
 });
 
 test("keeps the chat list's own children as Canvas rendered them", async (t) => {
@@ -157,14 +157,14 @@ test('leaves the chat alone while off, and restores it when disabled', async (t)
   await activateExtension(page, fakeHost());
   assert.deepEqual(shown(page), ['Running ls']);
 
-  await page.changeSettings({ quietActivity: true });
+  await page.changeSettings({ collapseActivity: true });
   toggles(page)[0].querySelector('button').click();
   assert.deepEqual(shown(page), ['Running ls', 'Thinking']);
 
   await page.changeSettings({});
   assert.deepEqual(shown(page), ['Running ls']);
-  assert.equal(page.document.querySelector('[data-extras-quiet], [data-extras-shown]'), null);
-  assert.equal(page.document.getElementById('openhands-extras-quiet-activity'), null);
+  assert.equal(page.document.querySelector('[data-extras-folded], [data-extras-shown]'), null);
+  assert.equal(page.document.getElementById('openhands-extras-collapse-activity'), null);
 });
 
 test('a second copy of the app stops the first, rather than fighting it', async (t) => {
@@ -199,7 +199,7 @@ test('says Thinking on the activity chip while it shows a folded title', async (
   const canvasLabel = chip.children[1];
   const visible = () =>
     [...chip.children]
-      .filter((child) => !child.matches('[data-extras-quiet]'))
+      .filter((child) => !child.matches('[data-extras-folded]'))
       .map((child) => child.textContent)
       .join('|');
   assert.equal(visible(), '|Thinking');
@@ -236,8 +236,8 @@ test('a translation that arrives after disabling changes nothing', async (t) => 
   await flush();
 
   assert.equal(toggles(page).length, 0);
-  assert.equal(page.document.querySelector('[data-extras-quiet]'), null);
-  assert.equal(page.document.getElementById('openhands-extras-quiet-activity'), null);
+  assert.equal(page.document.querySelector('[data-extras-folded]'), null);
+  assert.equal(page.document.getElementById('openhands-extras-collapse-activity'), null);
 });
 
 test("leaves rows alone when Canvas's markup doesn't have their wrapper", async (t) => {
@@ -249,7 +249,7 @@ test("leaves rows alone when Canvas's markup doesn't have their wrapper", async 
   ]);
   await activateExtension(page, fakeHost());
 
-  assert.equal(page.document.querySelector('[data-extras-quiet]'), null);
+  assert.equal(page.document.querySelector('[data-extras-folded]'), null);
   assert.equal(toggles(page).length, 0);
   assert.deepEqual(shown(page), ['Running ls', 'Reading a.js', 'Done.']);
 });
@@ -295,7 +295,7 @@ test('reads rows again when the language changes, and finds a new chat', async (
 
 test('one feature failing to clean up still lets the rest clean up', async (t) => {
   const page = openChat(t, [item(row('Running <strong>ls</strong>'))], {
-    quietActivity: true,
+    collapseActivity: true,
     tabStatus: true,
   });
   const host = fakeHost({ statuses: { [A]: 'waiting_for_confirmation' } });
@@ -309,7 +309,7 @@ test('one feature failing to clean up still lets the rest clean up', async (t) =
   };
   assert.throws(dispose, /Badges unavailable/);
   assert.equal(toggles(page).length, 0);
-  assert.equal(page.document.getElementById('openhands-extras-quiet-activity'), null);
+  assert.equal(page.document.getElementById('openhands-extras-collapse-activity'), null);
 });
 
 test('reads again only the chat items that change', async (t) => {

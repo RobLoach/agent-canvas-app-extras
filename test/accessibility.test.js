@@ -12,7 +12,7 @@ const BODY = `
 const STYLES = {
   reduceMotion: 'openhands-extras-reduce-motion',
   clearFocus: 'openhands-extras-clear-focus',
-  largerTargets: 'openhands-extras-larger-targets',
+  biggerTapTargets: 'openhands-extras-bigger-tap-targets',
 };
 
 // The rules of a style, including those inside media queries.
@@ -51,25 +51,25 @@ test('Clear links and focus underlines hover-only links and rings focus', async 
 });
 
 test('Bigger tap targets sizes controls on touch screens only', async (t) => {
-  const page = setupPage(t, { body: BODY, settings: { largerTargets: true } });
+  const page = setupPage(t, { body: BODY, settings: { biggerTapTargets: true } });
   const dispose = await activateExtension(page, fakeHost());
 
   assert.match(
-    page.document.getElementById(STYLES.largerTargets).textContent,
+    page.document.getElementById(STYLES.biggerTapTargets).textContent,
     /@media \(pointer: coarse\)/,
   );
   for (const id of ['row', 'icon']) {
-    assert.ok(ruleFor(page, STYLES.largerTargets, id), id);
+    assert.ok(ruleFor(page, STYLES.biggerTapTargets, id), id);
   }
   assert.ok(
-    rules(page, STYLES.largerTargets).some(
+    rules(page, STYLES.biggerTapTargets).some(
       (rule) =>
         page.document.getElementById('icon').matches(rule.selectorText) &&
         rule.style.getPropertyValue('min-width') === '2.75rem',
     ),
   );
-  assert.equal(ruleFor(page, STYLES.largerTargets, 'text'), undefined);
+  assert.equal(ruleFor(page, STYLES.biggerTapTargets, 'text'), undefined);
 
   dispose();
-  assert.equal(page.document.getElementById(STYLES.largerTargets), null);
+  assert.equal(page.document.getElementById(STYLES.biggerTapTargets), null);
 });

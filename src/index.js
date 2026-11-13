@@ -15,18 +15,18 @@ import { closeAudio, unlockAudio } from './audio.js';
 import { CHECK_MS, conversationLoader, throttle } from './checks.js';
 import { watchAgentStatus } from './status.js';
 import { watchUnread } from './unread.js';
-import { watchQuietActivity } from './quiet-activity.js';
+import { watchCollapseActivity } from './collapse-activity.js';
 import { watchResponsiveTables } from './tables.js';
 import { installableApp } from './installable.js';
 import {
   CLEAR_FOCUS_CSS,
   FOCUSED_NEW_CHAT_CSS,
   fontSize,
-  LARGER_TARGETS_CSS,
+  BIGGER_TAP_TARGETS_CSS,
   MOBILE_FIXES_CSS,
   REDUCE_MOTION_CSS,
   styleSwitch,
-  WIDE_CANVAS_CSS,
+  WIDE_CHAT_CSS,
 } from './styles.js';
 import {
   SETTINGS_PAGE,
@@ -77,26 +77,26 @@ export function activate(host) {
       ? setTimeout(checks.request, CHECK_MS)
       : 0;
   }, CHECK_MS);
-  const quietActivity = watchQuietActivity((id) => agentStatus.statusOf(id));
+  const collapseActivity = watchCollapseActivity((id) => agentStatus.statusOf(id));
   const agentStatus = watchAgentStatus(host, loadConversations, checks, () =>
-    quietActivity.onStatus(),
+    collapseActivity.onStatus(),
   );
   const features = [
     watchCustomizeMenu(host),
     sidebarLinks(host.extension.name),
     settingsView,
-    styleSwitch('wideCanvas', WIDE_CANVAS_CSS),
+    styleSwitch('wideChat', WIDE_CHAT_CSS),
     styleSwitch('focusedNewChat', FOCUSED_NEW_CHAT_CSS),
     styleSwitch('mobileFixes', MOBILE_FIXES_CSS),
     fontSize(),
     styleSwitch('reduceMotion', REDUCE_MOTION_CSS),
     styleSwitch('clearFocus', CLEAR_FOCUS_CSS),
-    styleSwitch('largerTargets', LARGER_TARGETS_CSS),
+    styleSwitch('biggerTapTargets', BIGGER_TAP_TARGETS_CSS),
     watchResponsiveTables(),
     agentStatus,
     watchUnread(loadConversations, checks),
     installableApp(host),
-    quietActivity,
+    collapseActivity,
     keyboardShortcuts(host, loadConversations),
   ];
   function each(method, ...args) {
@@ -110,7 +110,7 @@ export function activate(host) {
   };
   window.addEventListener('storage', onStorage);
   const onInput = () => {
-    if (settings.confirmationSound) unlockAudio();
+    if (settings.notificationSounds) unlockAudio();
   };
   for (const type of ['pointerdown', 'keydown']) {
     window.addEventListener(type, onInput, true);

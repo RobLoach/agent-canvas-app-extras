@@ -369,7 +369,7 @@ async function notify(host, { id, title, status, icon, isOpen, isDisposed }) {
 const SWITCH_GROUPS = ['Chat', 'Status and notifications', 'Accessibility', 'App'];
 const SWITCHES = [
   {
-    key: 'wideCanvas',
+    key: 'wideChat',
     group: 'Chat',
     label: 'Wide chat',
     description: 'Let the chat use the full width of the page.',
@@ -389,7 +389,7 @@ const SWITCHES = [
       "Stack a table's cells under their headings while it's too wide for the chat.",
   },
   {
-    key: 'quietActivity',
+    key: 'collapseActivity',
     group: 'Chat',
     status: 'follow',
     label: 'Collapse agent activity',
@@ -422,7 +422,7 @@ const SWITCHES = [
     enable: requestNotificationPermission,
   },
   {
-    key: 'confirmationSound',
+    key: 'notificationSounds',
     group: 'Status and notifications',
     status: 'follow',
     label: 'Notification sounds',
@@ -470,7 +470,7 @@ const SWITCHES = [
       'Underline every link, not only on hover, and outline what has keyboard focus in a thick ring.',
   },
   {
-    key: 'largerTargets',
+    key: 'biggerTapTargets',
     group: 'Accessibility',
     label: 'Bigger tap targets',
     description:
@@ -505,22 +505,19 @@ const DEFAULT_SETTINGS = Object.fromEntries(
 
 let settings = DEFAULT_SETTINGS;
 
-// Switches since merged into others turn those on.
-const MERGED_SWITCHES = { appBadge: 'tabStatus', themeColor: 'installableApp' };
-
+// Each switch's stored value, or its default where there's none, or it's
+// not one of its choices.
 function loadSettings() {
-  const stored = { ...readJson(STORAGE_KEY, {}) };
-  for (const [old, key] of Object.entries(MERGED_SWITCHES)) {
-    if (stored[old]) stored[key] = true;
-    delete stored[old];
-  }
-  settings = { ...DEFAULT_SETTINGS, ...stored };
-  for (const item of SWITCHES) {
-    const value = settings[item.key];
-    if (item.options && !item.options.some(([option]) => option === value)) {
-      settings[item.key] = item.default;
-    }
-  }
+  const stored = readJson(STORAGE_KEY, {});
+  settings = Object.fromEntries(
+    SWITCHES.map((item) => {
+      const value = stored?.[item.key];
+      const valid = item.options
+        ? item.options.some(([option]) => option === value)
+        : typeof value === 'boolean';
+      return [item.key, valid ? value : DEFAULT_SETTINGS[item.key]];
+    }),
+  );
 }
 
 // Saves the settings, or with none, removes them, turning every feature off.
@@ -886,7 +883,7 @@ function watchAgentStatus(host, loadConversations, checks, onRender) {
         isDisposed: () => disposed,
       }).catch(() => {});
     }
-    if (settings.confirmationSound && next === WAITING) {
+    if (settings.notificationSounds && next === WAITING) {
       chime(id).catch(() => {});
     }
     return waitingChanged;
@@ -1188,14 +1185,14 @@ function watchUnread(loadConversations, checks) {
 // Collapse agent activity.
 
 
-const QUIET_STYLE_ID = 'openhands-extras-quiet-activity';
-const QUIET_ATTR = 'data-extras-quiet';
+const COLLAPSE_STYLE_ID = 'openhands-extras-collapse-activity';
+const FOLDED_ATTR = 'data-extras-folded';
 const SHOWN_ATTR = 'data-extras-shown';
 const EVENT_TITLE = '[data-testid="generic-event-message-title"]';
 
 // Canvas's titles for commands and file reads, before and after, in English
 // until its translations for the page's language load.
-const QUIET_LABELS = {
+const FOLD_LABELS = {
   ACTION_MESSAGE$RUN: 'Running <cmd>{{command}}</cmd>',
   ACTION_MESSAGE$RUN_IPYTHON: 'Running a Python command',
   ACTION_MESSAGE$READ: 'Reading <path>{{path}}</path>',
@@ -1230,30 +1227,30 @@ function labelPattern(labels) {
 // Canvas's titles to fold, as a pattern, and its "Thinking", by language:
 // English until Canvas's translations for the language arrive, when onLoad
 // runs so they can be used.
-const ENGLISH_QUIET_LABELS = {
-  title: labelPattern(Object.values(QUIET_LABELS)),
+const ENGLISH_FOLD_LABELS = {
+  title: labelPattern(Object.values(FOLD_LABELS)),
   thinking: 'Thinking',
 };
-const quietLabelsByLanguage = new Map();
+const foldLabelsByLanguage = new Map();
 
-function quietLabels(language, onLoad) {
-  if (!quietLabelsByLanguage.has(language)) {
-    quietLabelsByLanguage.set(language, ENGLISH_QUIET_LABELS);
+function foldLabels(language, onLoad) {
+  if (!foldLabelsByLanguage.has(language)) {
+    foldLabelsByLanguage.set(language, ENGLISH_FOLD_LABELS);
     if (language !== 'en') {
       canvasTranslations(language).then((translated) => {
-        quietLabelsByLanguage.set(language, {
+        foldLabelsByLanguage.set(language, {
           title: labelPattern(
-            Object.entries(QUIET_LABELS).map(
+            Object.entries(FOLD_LABELS).map(
               ([key, label]) => translated[key] ?? label,
             ),
           ),
-          thinking: translated[THINKING_KEY] ?? ENGLISH_QUIET_LABELS.thinking,
+          thinking: translated[THINKING_KEY] ?? ENGLISH_FOLD_LABELS.thinking,
         });
         onLoad();
       });
     }
   }
-  return quietLabelsByLanguage.get(language);
+  return foldLabelsByLanguage.get(language);
 }
 
 // Canvas's own "Thinking" entry, with its chevron and lightbulb, as a toggle
@@ -1287,11 +1284,11 @@ const expanded = (thinking) =>
 // to show. Timed out commands, the only failures Canvas marks, stay visible.
 // The last stretch pulses while the open conversation is running. The body
 // observer only watches child lists, so marking doesn't re-trigger it.
-function watchQuietActivity(statusOf) {
+function watchCollapseActivity(statusOf) {
   let active = false;
   let disposed = false;
   // Canvas's titles to fold and its "Thinking", in its current language.
-  let labels = ENGLISH_QUIET_LABELS;
+  let labels = ENGLISH_FOLD_LABELS;
   // Each stretch's toggle, by the stretch's first chat item.
   let toggles = new WeakMap();
   // Whether the last stretch pulses, for the open conversation running.
@@ -1301,7 +1298,7 @@ function watchQuietActivity(statusOf) {
   // change once Canvas renders it.
   let chat = null;
   let chip = null;
-  let quietRows = new WeakMap();
+  let foldRows = new WeakMap();
   // Each chat item as last read, read again only once it changes, so a
   // streaming run doesn't rescan the whole chat on every update.
   let readItems = new WeakMap();
@@ -1314,9 +1311,9 @@ function watchQuietActivity(statusOf) {
 
   function reveal() {
     for (const element of document.querySelectorAll(
-      `[${QUIET_ATTR}], [${SHOWN_ATTR}]`,
+      `[${FOLDED_ATTR}], [${SHOWN_ATTR}]`,
     )) {
-      element.removeAttribute(QUIET_ATTR);
+      element.removeAttribute(FOLDED_ATTR);
       element.removeAttribute(SHOWN_ATTR);
     }
     for (const ours of document.querySelectorAll(
@@ -1324,38 +1321,38 @@ function watchQuietActivity(statusOf) {
     )) {
       ours.remove();
     }
-    removeElement(QUIET_STYLE_ID);
+    removeElement(COLLAPSE_STYLE_ID);
     toggles = new WeakMap();
-    quietRows = new WeakMap();
+    foldRows = new WeakMap();
     readItems = new WeakMap();
   }
 
-  // Each chat item's event rows, the quiet ones among them, and whether
+  // Each chat item's event rows, the foldable ones among them, and whether
   // they're all it shows.
   function readItem(item) {
     const rows = [];
-    const quiet = [];
+    const foldable = [];
     for (const title of item.querySelectorAll(EVENT_TITLE)) {
       // Only a row inside the item: were Canvas to drop a wrapper, this would
       // otherwise hide the item, or the whole chat.
       const row = title.parentElement?.parentElement;
       if (!row || row === item || !item.contains(row)) continue;
       rows.push(row);
-      let known = quietRows.get(row);
+      let known = foldRows.get(row);
       if (known?.labels !== labels) {
-        known = { labels, quiet: labels.title.test(title.textContent.trim()) };
-        quietRows.set(row, known);
+        known = { labels, foldable: labels.title.test(title.textContent.trim()) };
+        foldRows.set(row, known);
       }
-      if (known.quiet && !row.querySelector('[data-testid="status-icon"]')) {
-        quiet.push(row);
+      if (known.foldable && !row.querySelector('[data-testid="status-icon"]')) {
+        foldable.push(row);
       }
     }
     const children = [...item.children].filter(
       (child) => !child.hasAttribute(THINKING_ATTR),
     );
     const whole =
-      children.length > 0 && children.every((child) => quiet.includes(child));
-    return { item, rows, quiet, whole, labels };
+      children.length > 0 && children.every((child) => foldable.includes(child));
+    return { item, rows, foldable, whole, labels };
   }
 
   function itemEntry(item) {
@@ -1377,15 +1374,15 @@ function watchQuietActivity(statusOf) {
     }
   }
 
-  // Runs of items with quiet rows: a stretch starts at any item with some,
+  // Runs of items with foldable rows: a stretch starts at any item with some,
   // and carries on through items with nothing else.
   function stretches(items) {
     const found = [];
     let current = null;
     for (const entry of items) {
-      if (!entry.quiet.length || !entry.whole) {
+      if (!entry.foldable.length || !entry.whole) {
         if (current) found.push(current);
-        current = entry.quiet.length ? [entry] : null;
+        current = entry.foldable.length ? [entry] : null;
       } else {
         (current ??= []).push(entry);
       }
@@ -1401,9 +1398,9 @@ function watchQuietActivity(statusOf) {
     if (!chip) return;
     let ours = chip.querySelector(`:scope > [${CHIP_LABEL_ATTR}]`);
     const label = [...chip.children].findLast((child) => child !== ours);
-    const quiet = !!label && labels.title.test(label.textContent.trim());
-    if (label) toggleAttr(label, QUIET_ATTR, quiet);
-    if (!quiet) {
+    const foldable = !!label && labels.title.test(label.textContent.trim());
+    if (label) toggleAttr(label, FOLDED_ATTR, foldable);
+    if (!foldable) {
       ours?.remove();
       return;
     }
@@ -1418,16 +1415,16 @@ function watchQuietActivity(statusOf) {
 
   function apply() {
     if (disposed) return;
-    if (!settings.quietActivity) {
+    if (!settings.collapseActivity) {
       if (active) reveal();
       active = false;
       return;
     }
     active = true;
-    labels = quietLabels(canvasLanguage(), apply);
+    labels = foldLabels(canvasLanguage(), apply);
     setStyle(
-      QUIET_STYLE_ID,
-      `[${QUIET_ATTR}]:not([${SHOWN_ATTR}]) { display: none !important; }`,
+      COLLAPSE_STYLE_ID,
+      `[${FOLDED_ATTR}]:not([${SHOWN_ATTR}]) { display: none !important; }`,
     );
     relabelChip();
     chat = find(chat, '[data-testid="chat-scroll-container"]');
@@ -1448,7 +1445,7 @@ function watchQuietActivity(statusOf) {
       used.add(thinking);
       const open = expanded(thinking);
       for (const entry of stretch) {
-        const nodes = entry.whole && entry !== last ? [entry.item] : entry.quiet;
+        const nodes = entry.whole && entry !== last ? [entry.item] : entry.foldable;
         for (const node of nodes) hidden.set(node, open);
       }
       thinking.querySelector('svg').classList.toggle('rotate-180', open);
@@ -1461,7 +1458,7 @@ function watchQuietActivity(statusOf) {
     }
     for (const { item, rows } of items) {
       for (const node of [item, ...rows]) {
-        toggleAttr(node, QUIET_ATTR, hidden.has(node));
+        toggleAttr(node, FOLDED_ATTR, hidden.has(node));
         toggleAttr(node, SHOWN_ATTR, hidden.get(node) === true);
       }
     }
@@ -1859,7 +1856,7 @@ function installableApp(host) {
 // The chat thread is the only max-w-200 element that is also h-full, so the
 // Customize, Settings and home launcher columns keep their width. Unlayered
 // CSS beats Tailwind's @layer utilities regardless of specificity.
-const WIDE_CANVAS_CSS =
+const WIDE_CHAT_CSS =
   '[data-agent-server-ui] .max-w-200.h-full.min-h-0 { max-width: none; }';
 
 // The new chat page (HomeChatLauncher) puts its heading and tagline
@@ -1938,7 +1935,7 @@ a[href].hover\\:underline { text-decoration-line: underline; text-underline-offs
 
 // 44px, as WCAG 2.5.5 asks, for controls; inline links in text are left as
 // they are, as min-height doesn't apply to them.
-const LARGER_TARGETS_CSS = `
+const BIGGER_TAP_TARGETS_CSS = `
 @media (pointer: coarse) {
   button, [role="button"], a[href], select, summary { min-height: 2.75rem; }
   button[aria-label], [role="button"][aria-label] { min-width: 2.75rem; }
@@ -2746,26 +2743,26 @@ function activate(host) {
       ? setTimeout(checks.request, CHECK_MS)
       : 0;
   }, CHECK_MS);
-  const quietActivity = watchQuietActivity((id) => agentStatus.statusOf(id));
+  const collapseActivity = watchCollapseActivity((id) => agentStatus.statusOf(id));
   const agentStatus = watchAgentStatus(host, loadConversations, checks, () =>
-    quietActivity.onStatus(),
+    collapseActivity.onStatus(),
   );
   const features = [
     watchCustomizeMenu(host),
     sidebarLinks(host.extension.name),
     settingsView,
-    styleSwitch('wideCanvas', WIDE_CANVAS_CSS),
+    styleSwitch('wideChat', WIDE_CHAT_CSS),
     styleSwitch('focusedNewChat', FOCUSED_NEW_CHAT_CSS),
     styleSwitch('mobileFixes', MOBILE_FIXES_CSS),
     fontSize(),
     styleSwitch('reduceMotion', REDUCE_MOTION_CSS),
     styleSwitch('clearFocus', CLEAR_FOCUS_CSS),
-    styleSwitch('largerTargets', LARGER_TARGETS_CSS),
+    styleSwitch('biggerTapTargets', BIGGER_TAP_TARGETS_CSS),
     watchResponsiveTables(),
     agentStatus,
     watchUnread(loadConversations, checks),
     installableApp(host),
-    quietActivity,
+    collapseActivity,
     keyboardShortcuts(host, loadConversations),
   ];
   function each(method, ...args) {
@@ -2779,7 +2776,7 @@ function activate(host) {
   };
   window.addEventListener('storage', onStorage);
   const onInput = () => {
-    if (settings.confirmationSound) unlockAudio();
+    if (settings.notificationSounds) unlockAudio();
   };
   for (const type of ['pointerdown', 'keydown']) {
     window.addEventListener(type, onInput, true);
