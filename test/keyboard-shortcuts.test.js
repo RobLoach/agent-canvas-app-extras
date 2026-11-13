@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { A, B, start } from './helpers.js';
+import { A, B, flush, start } from './helpers.js';
 
 // The sidebar's conversations and the message box, as Canvas renders them.
 const card = (id) =>
@@ -64,6 +64,19 @@ test('Alt+↑ and Alt+↓ open the previous and next conversation', async (t) =>
   assert.deepEqual(host.navigations, [`/conversations/${A}?backend=local`]);
 });
 
+test('Alt+↑ and Alt+↓ work from the message box too, but Alt+N does not', async (t) => {
+  const { page, host } = await start(t, {
+    path: `/conversations/${A}`,
+    body: BODY,
+    settings: ON,
+  });
+  const composer = page.document.querySelector('[data-testid="chat-input"]');
+  assert.ok(press(page, 'ArrowDown', { altKey: true }, composer).defaultPrevented);
+  assert.equal(press(page, 'Dead', { altKey: true, code: 'KeyN' }, composer).defaultPrevented, false);
+
+  assert.deepEqual(host.navigations, [`/conversations/${B}?backend=local`]);
+});
+
 test('Alt+N starts a new chat, on any keyboard layout', async (t) => {
   const { page, host } = await start(t, { body: BODY, settings: ON });
   // As on a Mac, where ⌥N types a dead key.
@@ -124,4 +137,45 @@ test('the list keeps keys from Canvas while open, without blocking the browser',
 test('/ is left to the browser where there is no message box', async (t) => {
   const { page } = await start(t, { body: '', settings: ON });
   assert.equal(press(page, '/').defaultPrevented, false);
+});
+
+test('Alt+Shift+↓ opens the next conversation that needs you, from the message box too', async (t) => {
+  const { page, host } = await start(t, {
+    path: `/conversations/${A}`,
+    body: BODY,
+    settings: ON,
+    statuses: { [A]: 'idle', [B]: 'waiting_for_confirmation' },
+  });
+  const composer = page.document.querySelector('[data-testid="chat-input"]');
+  assert.ok(press(page, 'ArrowDown', { altKey: true, shiftKey: true }, composer).defaultPrevented);
+  await flush();
+
+  assert.deepEqual(host.navigations, [`/conversations/${B}?backend=local`]);
+});
+
+test('Alt+Shift+↓ falls back to an unread conversation, and stays put without one', async (t) => {
+  const { page, host } = await start(t, {
+    path: `/conversations/${B}`,
+    body: BODY,
+    settings: ON,
+  });
+  press(page, 'ArrowDown', { altKey: true, shiftKey: true });
+  await flush();
+  assert.deepEqual(host.navigations, []);
+
+  page.document.querySelector('[data-testid="conversation-card"]').insertAdjacentHTML(
+    'beforeend',
+    '<span data-extras-unread></span>',
+  );
+  press(page, 'ArrowDown', { altKey: true, shiftKey: true });
+  await flush();
+  assert.deepEqual(host.navigations, [`/conversations/${A}?backend=local`]);
+});
+
+test("lists Canvas's own approve and reject shortcuts", async (t) => {
+  const { page } = await start(t, { body: BODY, settings: ON });
+  press(page, '?');
+
+  assert.match(help(page).textContent, /Approve the agent's pending action/);
+  assert.match(help(page).textContent, /Reject the agent's pending action/);
 });

@@ -95,7 +95,7 @@ export function activate(host) {
     watchUnread(loadConversations, checks),
     installableApp(host),
     quietActivity,
-    keyboardShortcuts(host),
+    keyboardShortcuts(host, loadConversations),
   ];
   function each(method, ...args) {
     for (const feature of features) feature[method]?.(...args);

@@ -43,7 +43,7 @@ export const SWITCHES = [
     group: 'Chat',
     label: 'Keyboard shortcuts',
     description:
-      'Press ? to list them: / focuses the message box, Alt+↑ and Alt+↓ open the previous or next conversation, and Alt+N starts a new chat.',
+      'Press ? to list them: / focuses the message box, Alt+↑ and Alt+↓ open the previous or next conversation and Alt+Shift+↓ the next one that needs you, even from the message box, and Alt+N starts a new chat.',
   },
   {
     key: 'tabStatus',
