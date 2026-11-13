@@ -22,6 +22,7 @@ An [OpenHands](https://www.openhands.dev/) Agent Canvas app that adds a few UI t
 | **Desktop notifications** | Notifies you when the agent finishes or needs you while you're away. |
 | **Notification sounds** | Chimes when the agent needs your confirmation while you're away. |
 | **Unread markers** | Marks the conversations in the sidebar that changed since you last had them open. |
+| **Check for changes every** | How often the settings above ask the Agent Server for changes: from every 5 seconds to every 5 minutes, every 10 seconds by default. |
 
 ### Accessibility
 
@@ -60,7 +61,7 @@ Feel free to propose more features in the issue queue.
 - The settings page is an app page, which Canvas serves at `/extensions/agent-canvas-app-extras/settings`, as it has no way for an app to add a page under Customize. The app adds the settings page to Customize's menu itself, and hides its own sidebar link.
 - Canvas has no app API for settings, tab titles or page styles yet. The app works with Canvas's markup directly (its app card, chat, sidebar and title), so an OpenHands update that changes it can break a feature.
 - Settings, runs that ended while you were away, what you've read and the conversation you're looking at are kept in the browser's `localStorage`, under `openhands-extras:settings`, `:unseen`, `:read` and `:viewing`, so they're per browser rather than per backend.
-- While a feature that needs conversation statuses is on, the app asks the Agent Server for them, and for unread markers, in one request when the chat changes, at most every 20 seconds, and every 20 seconds while a run is going or for the counts and unread markers. Nothing is requested while those features are off, and unread markers rest while the tab is hidden.
+- While a feature that needs conversation statuses is on, the app asks the Agent Server for them, and for unread markers, in one request when the chat changes, at most once per **Check for changes every**, and that often while a run is going or for the counts and unread markers. Nothing is requested while those features are off, and unread markers rest while the tab is hidden.
 
 ### Tests
 

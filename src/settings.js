@@ -79,6 +79,25 @@ export const SWITCHES = [
     description: 'Mark the conversations in the sidebar that changed since you last opened them.',
   },
   {
+    key: 'checkInterval',
+    group: 'Notifications',
+    label: 'Check for changes every',
+    description:
+      'How often to ask the Agent Server about runs and unread conversations, while a setting above needs it.',
+    // Choices as [value, label, the time between checks in ms].
+    options: [
+      ['5s', '5 seconds', 5000],
+      ['10s', '10 seconds', 10000],
+      ['20s', '20 seconds', 20000],
+      ['30s', '30 seconds', 30000],
+      ['1m', '1 minute', 60000],
+      ['2m', '2 minutes', 120000],
+      ['3m', '3 minutes', 180000],
+      ['5m', '5 minutes', 300000],
+    ],
+    default: '10s',
+  },
+  {
     key: 'fontSize',
     group: 'Accessibility',
     label: 'Font size',

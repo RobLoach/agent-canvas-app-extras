@@ -19,7 +19,7 @@ import {
   STATUS_BADGES,
 } from './statuses.js';
 import { notify } from './notifications.js';
-import { CHECK_MS } from './checks.js';
+import { checkMs } from './checks.js';
 
 const WAITING_COUNT_PATH =
   '/api/conversations/count?status=waiting_for_confirmation';
@@ -312,7 +312,7 @@ export function watchAgentStatus(host, loadConversations, checks, onRender) {
     const ids = [...conversations.keys(), ...unseen];
     if (ids.length || counting()) {
       try {
-        const countDue = counting() && Date.now() - countedAt >= CHECK_MS;
+        const countDue = counting() && Date.now() - countedAt >= checkMs();
         const [infos, count] = await Promise.all([
           ids.length ? loadConversations(ids) : [],
           countDue ? fetchCount() : counting() ? waiting : 0,
@@ -405,9 +405,11 @@ export function watchAgentStatus(host, loadConversations, checks, onRender) {
     refresh() {
       if (!counting()) unseenRuns.clear();
       render();
-      const next = SWITCHES.filter((item) => item.status)
-        .map((item) => settings[item.key])
-        .join();
+      // A new interval checks at once too, so the next poll follows it.
+      const next = [
+        ...SWITCHES.filter((item) => item.status).map((item) => settings[item.key]),
+        settings.checkInterval,
+      ].join();
       if (next === statusSettings) return;
       statusSettings = next;
       countedAt = -Infinity;

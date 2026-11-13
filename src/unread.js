@@ -32,7 +32,7 @@ const readState = {
 
 // Mark the conversations in the sidebar that changed since you last had them
 // open, with a dot after their title. Their update times come from the Agent
-// Server, checked as the page changes and every CHECK_MS, except while
+// Server, checked as the page changes and at each check, except while
 // the tab is hidden, when nobody sees the sidebar: it's checked on return.
 export function watchUnread(loadConversations, checks) {
   // Each sidebar conversation's last update, by key, in ms.

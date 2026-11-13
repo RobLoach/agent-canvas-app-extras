@@ -425,6 +425,25 @@ const SWITCHES = [
     description: 'Mark the conversations in the sidebar that changed since you last opened them.',
   },
   {
+    key: 'checkInterval',
+    group: 'Notifications',
+    label: 'Check for changes every',
+    description:
+      'How often to ask the Agent Server about runs and unread conversations, while a setting above needs it.',
+    // Choices as [value, label, the time between checks in ms].
+    options: [
+      ['5s', '5 seconds', 5000],
+      ['10s', '10 seconds', 10000],
+      ['20s', '20 seconds', 20000],
+      ['30s', '30 seconds', 30000],
+      ['1m', '1 minute', 60000],
+      ['2m', '2 minutes', 120000],
+      ['3m', '3 minutes', 180000],
+      ['5m', '5 minutes', 300000],
+    ],
+    default: '10s',
+  },
+  {
     key: 'fontSize',
     group: 'Accessibility',
     label: 'Font size',
@@ -504,10 +523,13 @@ function saveSettings(next) {
 // need them.
 
 
-// Status and unread checks run together, sharing one request, at most this
-// often, and poll this often while a run is going, while counting the
-// conversations waiting for confirmation, and for the sidebar's changes.
-const CHECK_MS = 20000;
+// Status and unread checks run together, sharing one request, at most once
+// per Check for changes every, and poll that often while a run is going,
+// while counting the conversations waiting for confirmation, and for the
+// sidebar's changes.
+const CHECK_INTERVALS = SWITCHES.find(({ key }) => key === 'checkInterval').options;
+const checkMs = () =>
+  CHECK_INTERVALS.find(([value]) => value === settings.checkInterval)?.[2] ?? 10000;
 
 // Conversations from the Agent Server, by id, with every load asked for at
 // the same moment, e.g. by the agent status and unread markers on the same
@@ -536,7 +558,7 @@ function conversationLoader(host) {
   };
 }
 
-// Run task at most once per gap, folding the calls in between into one run at
+// Run task at most once per gap(), folding the calls in between into one run at
 // the end of it, and never two at once: a call during a run queues another,
 // which now() runs as soon as the first is done.
 function throttle(task, gap) {
@@ -569,7 +591,7 @@ function throttle(task, gap) {
   }
 
   function request() {
-    const wait = last + gap - Date.now();
+    const wait = last + gap() - Date.now();
     if (wait <= 0) {
       run();
     } else if (!trailing) {
@@ -899,7 +921,7 @@ function watchAgentStatus(host, loadConversations, checks, onRender) {
     const ids = [...conversations.keys(), ...unseen];
     if (ids.length || counting()) {
       try {
-        const countDue = counting() && Date.now() - countedAt >= CHECK_MS;
+        const countDue = counting() && Date.now() - countedAt >= checkMs();
         const [infos, count] = await Promise.all([
           ids.length ? loadConversations(ids) : [],
           countDue ? fetchCount() : counting() ? waiting : 0,
@@ -992,9 +1014,11 @@ function watchAgentStatus(host, loadConversations, checks, onRender) {
     refresh() {
       if (!counting()) unseenRuns.clear();
       render();
-      const next = SWITCHES.filter((item) => item.status)
-        .map((item) => settings[item.key])
-        .join();
+      // A new interval checks at once too, so the next poll follows it.
+      const next = [
+        ...SWITCHES.filter((item) => item.status).map((item) => settings[item.key]),
+        settings.checkInterval,
+      ].join();
       if (next === statusSettings) return;
       statusSettings = next;
       countedAt = -Infinity;
@@ -1044,7 +1068,7 @@ const readState = {
 
 // Mark the conversations in the sidebar that changed since you last had them
 // open, with a dot after their title. Their update times come from the Agent
-// Server, checked as the page changes and every CHECK_MS, except while
+// Server, checked as the page changes and at each check, except while
 // the tab is hidden, when nobody sees the sidebar: it's checked on return.
 function watchUnread(loadConversations, checks) {
   // Each sidebar conversation's last update, by key, in ms.
@@ -2450,9 +2474,9 @@ function activate(host) {
     await Promise.allSettled(features.map((feature) => feature.check?.()));
     clearTimeout(poll);
     poll = !disposed && features.some((feature) => feature.polling?.())
-      ? setTimeout(checks.request, CHECK_MS)
+      ? setTimeout(checks.request, checkMs())
       : 0;
-  }, CHECK_MS);
+  }, checkMs);
   const collapseActivity = watchCollapseActivity((id) => agentStatus.statusOf(id));
   const agentStatus = watchAgentStatus(host, loadConversations, checks, () =>
     collapseActivity.onStatus(),

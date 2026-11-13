@@ -275,3 +275,16 @@ test('shows Show keyboard shortcuts only while they are on', async (t) => {
   await flush();
   assert.equal(button().hidden, false);
 });
+
+test('offers how often to check for changes, every 10 seconds by default', async (t) => {
+  const page = setupPage(t, { url: SETTINGS_URL });
+  await openSettings(page);
+
+  const select = page.document.querySelector('[data-testid="extras-checkInterval-select"]');
+  assert.equal(select.value, '10s');
+  assert.deepEqual(
+    [...select.options].map((option) => option.textContent),
+    ['5 seconds', '10 seconds', '20 seconds', '30 seconds', '1 minute', '2 minutes', '3 minutes', '5 minutes'],
+  );
+  assert.equal(select.closest('section').querySelector('h3').textContent, 'Notifications');
+});

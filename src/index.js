@@ -12,7 +12,7 @@ import { ownChange } from './dom.js';
 import { STORAGE_KEY } from './storage.js';
 import { loadSettings, saveSettings, settings } from './settings.js';
 import { closeAudio, unlockAudio } from './audio.js';
-import { CHECK_MS, conversationLoader, throttle } from './checks.js';
+import { checkMs, conversationLoader, throttle } from './checks.js';
 import { watchAgentStatus } from './status.js';
 import { watchUnread } from './unread.js';
 import { watchCollapseActivity } from './collapse-activity.js';
@@ -69,9 +69,9 @@ export function activate(host) {
     await Promise.allSettled(features.map((feature) => feature.check?.()));
     clearTimeout(poll);
     poll = !disposed && features.some((feature) => feature.polling?.())
-      ? setTimeout(checks.request, CHECK_MS)
+      ? setTimeout(checks.request, checkMs())
       : 0;
-  }, CHECK_MS);
+  }, checkMs);
   const collapseActivity = watchCollapseActivity((id) => agentStatus.statusOf(id));
   const agentStatus = watchAgentStatus(host, loadConversations, checks, () =>
     collapseActivity.onStatus(),
