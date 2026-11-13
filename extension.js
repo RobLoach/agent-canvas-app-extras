@@ -452,16 +452,9 @@ const PNG_ICONS = [
 ];
 const TOUCH_ICON_SIZE = 180;
 // Shortcuts on the installed app's icon, by path under Canvas's base path.
-// Canvas has no page listing conversations, which its sidebar does, so
-// "Conversations" opens the latest, as this app finds it by the query.
 // /conversations is Canvas's own home, which / may redirect from.
-const LATEST_PARAM = 'openhands-extras';
-const LATEST_PATH = `conversations?${LATEST_PARAM}=latest`;
-const LATEST_CONVERSATION_PATH =
-  '/api/conversations/search?limit=1&sort_order=UPDATED_AT_DESC';
 const SHORTCUTS = [
   ['New chat', 'conversations'],
-  ['Conversations', LATEST_PATH],
   ['Settings', 'settings'],
 ];
 
@@ -502,15 +495,6 @@ function pngIcon(image, size, purpose) {
   }
   context.drawImage(image, inset, inset, size - 2 * inset, size - 2 * inset);
   return canvas.toDataURL('image/png');
-}
-
-// Opens the latest conversation, or Canvas's home without one.
-async function openLatest(host) {
-  const found = await host.agentServer
-    .request({ path: LATEST_CONVERSATION_PATH })
-    .catch(() => null);
-  const id = found?.items?.[0]?.id;
-  host.navigate(id ? `/conversations/${conversationKey(id)}` : '/conversations');
 }
 
 function installableApp(host) {
@@ -653,27 +637,14 @@ function installableApp(host) {
   }
 
   // Launches go to their URL inside Canvas, as host.navigate() does, from
-  // Canvas's base path. Browsers only take one consumer, and pass this
-  // window's own launch to it, so the latest conversation opens from a cold
-  // start too. A page opened without the launch queue may still carry the
-  // query.
+  // Canvas's base path, in the window they reuse.
   function handleLaunches(base) {
-    if (launches) return;
+    if (launches || !window.launchQueue) return;
     launches = true;
-    const go = (url) => {
-      if (url.searchParams.get(LATEST_PARAM) === 'latest') {
-        openLatest(host);
-      } else if (url.href !== location.href) {
-        host.navigate(`/${url.href.slice(base.length)}`);
-      }
-    };
-    if (window.launchQueue) {
-      window.launchQueue.setConsumer(({ targetURL }) => {
-        if (targetURL && settings.installableApp) go(new URL(targetURL));
-      });
-    } else {
-      go(new URL(location.href));
-    }
+    window.launchQueue.setConsumer(({ targetURL }) => {
+      if (!targetURL || !settings.installableApp || targetURL === location.href) return;
+      host.navigate(`/${targetURL.slice(base.length)}`);
+    });
   }
 
   scheme?.addEventListener?.('change', apply);
@@ -687,7 +658,7 @@ function installableApp(host) {
       rootObserver.disconnect();
       scheme?.removeEventListener?.('change', apply);
       remove();
-      if (launches) window.launchQueue?.setConsumer(() => {});
+      if (launches) window.launchQueue.setConsumer(() => {});
     },
   };
 }

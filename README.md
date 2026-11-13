@@ -18,7 +18,7 @@ An [OpenHands](https://www.openhands.dev/) Agent Canvas app that adds a few UI t
 | **Reduce motion** | Stops Canvas's spinners, pulses, fades and slides, whatever your system's motion setting. |
 | **Clear links and focus** | Underlines every link, not only on hover, and outlines what has keyboard focus in a thick ring. |
 | **Bigger tap targets** | Makes buttons and sidebar rows at least 44 pixels tall on touch screens. |
-| **Installable app** | Lets your browser install Canvas as an app, with New chat, Conversations and Settings shortcuts and a title bar in Canvas's colours, clear of notches and home indicators. |
+| **Installable app** | Lets your browser install Canvas as an app, with New chat and Settings shortcuts and a title bar in Canvas's colours, clear of notches and home indicators. |
 | **Mobile fixes** | Keeps Canvas's dialogs within small screens, scrolling when they're taller, and stops the Automate tabs cutting off their names. |
 | **Usage page** | Adds a **Usage** page to the sidebar with what your conversations cost today, over 7 or 30 days, or all time, by model and by conversation. |
 
