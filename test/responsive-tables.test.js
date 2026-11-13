@@ -1,6 +1,5 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
 import { activateExtension, fakeHost, flush, setupPage } from './helpers.js';
 
 // A Markdown table as Canvas renders it, in its scroller, `width` pixels wide.
@@ -139,42 +138,21 @@ test('leaves tables outside Markdown alone', async (t) => {
 
 test('puts every table back when switched off or disabled', async (t) => {
   const page = openChat(t, { wide: 500 });
-  const removed = [];
-  const remove = page.window.removeEventListener.bind(page.window);
-  page.window.removeEventListener = (type, ...rest) => {
-    removed.push(type);
-    remove(type, ...rest);
-  };
   const dispose = await activateExtension(page, fakeHost());
   const clean = () => {
     assert.equal(stacked(page, 'wide'), false);
     assert.deepEqual(labels(page, 'wide'), [null, null, null, null]);
-    for (const name of ['data-bt-active', 'data-extras-table']) {
-      assert.equal(page.table('wide').hasAttribute(name), false, name);
-    }
+    assert.equal(page.table('wide').hasAttribute('data-extras-table'), false);
     assert.equal(style(page), null);
     assert.ok(page.observers.every((observer) => observer.targets.size === 0));
   };
 
   await page.changeSettings({ responsiveTables: false });
   clean();
-  assert.ok(removed.includes('resize'));
 
   await page.changeSettings({ responsiveTables: true });
   assert.equal(stacked(page, 'wide'), true);
 
   dispose();
   clean();
-});
-
-test('embeds Basic Table unchanged from its package', async () => {
-  const read = (path) => readFile(new URL(path, import.meta.url), 'utf8');
-  const [extension, library] = await Promise.all([
-    read('../extension.js'),
-    read('../node_modules/basictable/src/js/basictable.js'),
-  ]);
-  const embedded = extension.match(
-    /\/\/ BEGIN basictable\n([\s\S]*)\n\/\/ END basictable\n/,
-  )?.[1];
-  assert.equal(embedded, library.trimEnd());
 });

@@ -18,7 +18,7 @@ An [OpenHands](https://www.openhands.dev/) Agent Canvas app that adds a few UI t
 | **Reduce motion** | Stops Canvas's spinners, pulses, fades and slides, whatever your system's motion setting. |
 | **Clear links and focus** | Underlines every link, not only on hover, and outlines what has keyboard focus in a thick ring. |
 | **Bigger tap targets** | Makes buttons and sidebar rows at least 44 pixels tall on touch screens. |
-| **Installable app** | Lets your browser install Canvas as an app, with New chat, Conversations and Settings shortcuts and a title bar in Canvas's colours, clear of notches and home indicators. |
+| **Installable app** | Lets your browser install Canvas as an app, with New chat and Settings shortcuts and a title bar in Canvas's colours, clear of notches and home indicators. |
 | **Mobile fixes** | Keeps Canvas's dialogs within small screens, scrolling when they're taller, and stops the Automate tabs cutting off their names. |
 | **Usage page** | Adds a **Usage** page to the sidebar with what your conversations cost today, over 7 or 30 days, or all time, by model and by conversation. |
 
@@ -38,7 +38,7 @@ An [OpenHands](https://www.openhands.dev/) Agent Canvas app that adds a few UI t
 
 Feel free to propose more features in the issue queue.
 
-- The app is a single browser module: [`extension.js`](extension.js). Responsive tables uses [Basic Table](https://github.com/jerrylow/basictable), embedded unchanged at the end of it, as Canvas loads an app from one file. A test checks it against the `basictable` package.
+- The app's source is in [`src/`](src), one module per feature, from [`src/index.js`](src/index.js). Canvas loads an app from one file, so `npm run build` bundles them with Rollup into [`extension.js`](extension.js), which is checked in. `npm test` builds it first, and CI checks it matches `src/`.
 - The settings and usage pages are app pages, which Canvas serves at `/extensions/agent-canvas-app-extras/settings` and `/usage`, as it has no way for an app to add a page under Customize. The app adds the settings page to Customize's menu itself, and hides its own sidebar link.
 - Canvas has no app API for settings, tab titles or page styles yet. The app works with Canvas's markup directly (its app card, chat, sidebar and title), so an OpenHands update that changes it can break a feature.
 - Settings, runs that ended while you were away, what you've read and the conversation you're looking at are kept in the browser's `localStorage`, under `openhands-extras:settings`, `:unseen`, `:read` and `:viewing`, so they're per browser rather than per backend.
