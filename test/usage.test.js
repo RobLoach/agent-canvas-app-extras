@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { activateExtension, fakeHost, flush, setupPage } from './helpers.js';
+import { activateExtension, fakeHost, flush, mountPage, setupPage } from './helpers.js';
 
 const URL = 'https://canvas.test/extensions/agent-canvas-app-extras/usage';
 const NOW = Date.now() / 1000;
@@ -25,23 +25,23 @@ const conversation = (id, title, calls, extra = {}) => ({
   ...extra.info,
 });
 
-// The usage page, mounted as Canvas does, over these search pages.
+// The usage page, mounted as Canvas does, over these search pages, or with
+// the Agent Server answering as request() does.
 async function openUsage(t, pages, settings = { usagePage: true }) {
   const page = setupPage(t, { url: URL, settings });
   const host = fakeHost();
-  host.agentServer.request = async ({ path }) => {
-    host.requests.push(path);
-    const pageId = new globalThis.URL(path, 'https://agent.test').searchParams.get('page_id');
-    const index = pageId ? Number(pageId) : 0;
-    if (pages[index] instanceof Error) throw pages[index];
-    return { items: pages[index], next_page_id: index + 1 < pages.length ? String(index + 1) : null };
-  };
+  host.agentServer.request =
+    typeof pages === 'function'
+      ? pages
+      : async ({ path }) => {
+          host.requests.push(path);
+          const pageId = new globalThis.URL(path, 'https://agent.test').searchParams.get('page_id');
+          const index = pageId ? Number(pageId) : 0;
+          if (pages[index] instanceof Error) throw pages[index];
+          return { items: pages[index], next_page_id: index + 1 < pages.length ? String(index + 1) : null };
+        };
   await activateExtension(page, host);
-  const container = page.document.createElement('div');
-  page.document.body.append(container);
-  const unmount = host.pages.get('usage')({ container, path: '', navigate: host.navigate });
-  await flush();
-  return { page, host, container, unmount };
+  return { page, host, ...(await mountPage(page, host, 'usage')) };
 }
 
 const tiles = (container) =>
@@ -135,13 +135,7 @@ test('asks for nothing while the usage page is off', async (t) => {
 
 test('ignores an answer that arrives after the page closes', async (t) => {
   let answer;
-  const page = setupPage(t, { url: URL, settings: { usagePage: true } });
-  const host = fakeHost();
-  host.agentServer.request = () => new Promise((resolve) => (answer = resolve));
-  await activateExtension(page, host);
-  const container = page.document.createElement('div');
-  page.document.body.append(container);
-  const unmount = host.pages.get('usage')({ container, path: '', navigate: host.navigate });
+  const { container, unmount } = await openUsage(t, () => new Promise((resolve) => (answer = resolve)));
   unmount();
   answer({ items: [conversation('a', 'Alpha', [[1, 0]])] });
   await flush();
@@ -164,14 +158,11 @@ test('keeps focus on the period chosen, and says the total', async (t) => {
 });
 
 test('shows only the latest load when Refresh is pressed again', async (t) => {
-  const page = setupPage(t, { url: URL, settings: { usagePage: true } });
-  const host = fakeHost();
   const answers = [];
-  host.agentServer.request = () => new Promise((resolve, reject) => answers.push({ resolve, reject }));
-  await activateExtension(page, host);
-  const container = page.document.createElement('div');
-  page.document.body.append(container);
-  host.pages.get('usage')({ container, path: '', navigate: host.navigate });
+  const { container } = await openUsage(
+    t,
+    () => new Promise((resolve, reject) => answers.push({ resolve, reject })),
+  );
   const refresh = container.querySelector('[data-testid="extras-usage-refresh"]');
   assert.equal(refresh.disabled, true, 'not while loading');
 

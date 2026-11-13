@@ -1,6 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { activateExtension, fakeHost, flush, setupPage } from './helpers.js';
+import {
+  activateExtension,
+  fakeHost,
+  flush,
+  mountPage,
+  openSettings,
+  setupPage,
+  start,
+} from './helpers.js';
 
 const CARDS = `
   <article data-testid="canvas-extension-card-demo-page"><header></header><footer></footer></article>
@@ -22,17 +30,6 @@ const hintFor = (page, key) =>
 const stored = (page) =>
   JSON.parse(page.window.localStorage.getItem('openhands-extras:settings'));
 
-// The app with its settings page open, as Canvas mounts it. Returns the app's
-// disposer.
-async function openSettings(page, host = fakeHost()) {
-  const dispose = await activateExtension(page, host);
-  const container = page.document.createElement('div');
-  page.document.body.append(container);
-  host.pages.get('settings')({ container, path: '', navigate: host.navigate });
-  await flush();
-  return dispose;
-}
-
 const SWITCH_KEYS = [
   'wideChat',
   'focusedNewChat',
@@ -52,8 +49,7 @@ const SWITCH_KEYS = [
 ];
 
 test('leaves its card on Customize > Apps as Canvas renders it', async (t) => {
-  const page = setupPage(t, { body: CARDS });
-  await activateExtension(page, fakeHost());
+  const { page } = await start(t, { body: CARDS });
   page.mutate();
   await flush();
 
@@ -80,8 +76,7 @@ test("adds Extras under Apps in Customize's menu", async (t) => {
 });
 
 test("hides the settings page's sidebar link, and the usage page's while it's off", async (t) => {
-  const page = setupPage(t);
-  await activateExtension(page, fakeHost());
+  const { page } = await start(t);
   const style = () => page.document.getElementById('openhands-extras-sidebar').textContent;
   assert.match(style(), /agent-canvas-app-extras-settings/);
   assert.match(style(), /agent-canvas-app-extras-usage/);
@@ -227,13 +222,8 @@ test('keeps redrawing after Canvas cleans up an earlier mount late', async (t) =
   const page = setupPage(t, { url: SETTINGS_URL });
   const host = fakeHost();
   await activateExtension(page, host);
-  const mount = () => {
-    const container = page.document.createElement('div');
-    page.document.body.append(container);
-    return host.pages.get('settings')({ container, path: '', navigate: host.navigate });
-  };
-  const first = mount();
-  mount();
+  const { unmount: first } = await mountPage(page, host, 'settings');
+  await mountPage(page, host, 'settings');
   first();
 
   await page.changeSettings({ wideChat: true });

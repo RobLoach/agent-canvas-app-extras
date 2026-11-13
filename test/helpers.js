@@ -258,3 +258,32 @@ export async function start(
   await activateExtension(page, host);
   return { page, host };
 }
+
+// One of the app's styles' rules, by the style's id, with those inside its
+// media queries; none without the style.
+export const cssRules = (page, id) =>
+  [...(page.document.getElementById(id)?.sheet?.cssRules ?? [])].flatMap((rule) =>
+    rule.media ? [...rule.cssRules] : [rule],
+  );
+
+// The first of a style's rules that applies to an element, by their ids.
+export const styleRule = (page, styleId, elementId) =>
+  cssRules(page, styleId).find((rule) =>
+    page.document.getElementById(elementId).matches(rule.selectorText),
+  );
+
+// One of the app's pages, mounted in a container on the page as Canvas does.
+export async function mountPage(page, host, id, path = '') {
+  const container = page.document.createElement('div');
+  page.document.body.append(container);
+  const unmount = host.pages.get(id)({ container, path, navigate: host.navigate });
+  await flush();
+  return { container, unmount };
+}
+
+// The app with its settings page open. Returns the app's disposer.
+export async function openSettings(page, host = fakeHost()) {
+  const dispose = await activateExtension(page, host);
+  await mountPage(page, host, 'settings');
+  return dispose;
+}
