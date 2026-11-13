@@ -44,10 +44,6 @@ const FOCUS_RING = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus
 const HAS_FOCUS_RING =
   'has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-focus';
 
-// A round toggle, as Font size and the usage page's periods draw theirs.
-const pillClass = (on, focus = FOCUS_RING) =>
-  `cursor-pointer rounded-full border px-3 py-1 text-sm ${focus} ${on ? 'border-contrast bg-contrast text-contrast-foreground' : 'border-border text-muted hover:text-contrast'}`;
-
 function textButton(testid, text, onClick, look = 'underline') {
   const button = el('button', `w-fit cursor-pointer rounded-sm text-sm ${look} ${FOCUS_RING}`, text);
   button.type = 'button';
@@ -66,7 +62,6 @@ const pageHeader = (title, description) =>
   );
 const pageSection = (title, ...children) =>
   el('section', 'flex min-w-0 flex-col gap-3', el('h3', 'text-base font-semibold text-foreground', title), ...children);
-const note = (text) => el('p', 'text-sm text-tertiary-light', text);
 
 // The elements this app adds to Canvas's page body.
 const OWN_SELECTOR = `[${OWN_ATTR}], [${THINKING_ATTR}], [${CHIP_LABEL_ATTR}], [${UNREAD_ATTR}]`;
@@ -366,7 +361,7 @@ async function notify(host, { id, title, status, icon, isOpen, isDisposed }) {
 // status is 'follow' for a feature that needs conversation statuses, and
 // 'count' for one that also needs how many conversations need your input.
 // The settings page lists them under their group, in this order.
-const SWITCH_GROUPS = ['Chat', 'Notifications', 'Accessibility', 'Phone and app', 'Pages'];
+const SWITCH_GROUPS = ['Chat', 'Notifications', 'Accessibility', 'Phone and app'];
 const SWITCHES = [
   {
     key: 'wideChat',
@@ -430,6 +425,25 @@ const SWITCHES = [
     description: 'Mark the conversations in the sidebar that changed since you last opened them.',
   },
   {
+    key: 'checkInterval',
+    group: 'Notifications',
+    label: 'Check for changes every',
+    description:
+      'How often to ask the Agent Server about runs and unread conversations, while a setting above needs it.',
+    // Choices as [value, label, the time between checks in ms].
+    options: [
+      ['5s', '5 seconds', 5000],
+      ['10s', '10 seconds', 10000],
+      ['20s', '20 seconds', 20000],
+      ['30s', '30 seconds', 30000],
+      ['1m', '1 minute', 60000],
+      ['2m', '2 minutes', 120000],
+      ['3m', '3 minutes', 180000],
+      ['5m', '5 minutes', 300000],
+    ],
+    default: '10s',
+  },
+  {
     key: 'fontSize',
     group: 'Accessibility',
     label: 'Font size',
@@ -477,12 +491,6 @@ const SWITCHES = [
     label: 'Mobile fixes',
     description: "Fit Canvas's sidebar, dialogs, buttons and message box to phones and tablets.",
   },
-  {
-    key: 'usagePage',
-    group: 'Pages',
-    label: 'Usage page',
-    description: 'Add a Usage page to the sidebar, with what your conversations cost.',
-  },
 ];
 const DEFAULT_SETTINGS = Object.fromEntries(
   SWITCHES.map((item) => [item.key, item.options ? item.default : false]),
@@ -515,10 +523,13 @@ function saveSettings(next) {
 // need them.
 
 
-// Status and unread checks run together, sharing one request, at most this
-// often, and poll this often while a run is going, while counting the
-// conversations waiting for confirmation, and for the sidebar's changes.
-const CHECK_MS = 20000;
+// Status and unread checks run together, sharing one request, at most once
+// per Check for changes every, and poll that often while a run is going,
+// while counting the conversations waiting for confirmation, and for the
+// sidebar's changes.
+const CHECK_INTERVALS = SWITCHES.find(({ key }) => key === 'checkInterval').options;
+const checkMs = () =>
+  CHECK_INTERVALS.find(([value]) => value === settings.checkInterval)?.[2] ?? 10000;
 
 // Conversations from the Agent Server, by id, with every load asked for at
 // the same moment, e.g. by the agent status and unread markers on the same
@@ -547,7 +558,7 @@ function conversationLoader(host) {
   };
 }
 
-// Run task at most once per gap, folding the calls in between into one run at
+// Run task at most once per gap(), folding the calls in between into one run at
 // the end of it, and never two at once: a call during a run queues another,
 // which now() runs as soon as the first is done.
 function throttle(task, gap) {
@@ -580,7 +591,7 @@ function throttle(task, gap) {
   }
 
   function request() {
-    const wait = last + gap - Date.now();
+    const wait = last + gap() - Date.now();
     if (wait <= 0) {
       run();
     } else if (!trailing) {
@@ -910,7 +921,7 @@ function watchAgentStatus(host, loadConversations, checks, onRender) {
     const ids = [...conversations.keys(), ...unseen];
     if (ids.length || counting()) {
       try {
-        const countDue = counting() && Date.now() - countedAt >= CHECK_MS;
+        const countDue = counting() && Date.now() - countedAt >= checkMs();
         const [infos, count] = await Promise.all([
           ids.length ? loadConversations(ids) : [],
           countDue ? fetchCount() : counting() ? waiting : 0,
@@ -1003,9 +1014,11 @@ function watchAgentStatus(host, loadConversations, checks, onRender) {
     refresh() {
       if (!counting()) unseenRuns.clear();
       render();
-      const next = SWITCHES.filter((item) => item.status)
-        .map((item) => settings[item.key])
-        .join();
+      // A new interval checks at once too, so the next poll follows it.
+      const next = [
+        ...SWITCHES.filter((item) => item.status).map((item) => settings[item.key]),
+        settings.checkInterval,
+      ].join();
       if (next === statusSettings) return;
       statusSettings = next;
       countedAt = -Infinity;
@@ -1055,11 +1068,30 @@ const readState = {
 
 // Mark the conversations in the sidebar that changed since you last had them
 // open, with a dot after their title. Their update times come from the Agent
-// Server, checked as the page changes and every CHECK_MS, except while
+// Server, checked as the page changes and at each check, except while
 // the tab is hidden, when nobody sees the sidebar: it's checked on return.
+// Each conversation's record from the Agent Server holds every LLM call's
+// cost and tokens, so all of the sidebar's are asked for at most this often,
+// and in between only the ones not known yet.
+const UNREAD_ALL_MS = 60000;
+const CARD = '[data-testid="conversation-card"]';
+// Whether a change the body observer reported was to the sidebar's cards.
+const touchesCards = (records) =>
+  records.some(
+    ({ target, addedNodes }) =>
+      !!target.closest?.(CARD) ||
+      [...addedNodes].some(
+        (node) => node.nodeType === Node.ELEMENT_NODE && (node.matches(CARD) || node.querySelector(CARD)),
+      ),
+  );
+
 function watchUnread(loadConversations, checks) {
-  // Each sidebar conversation's last update, by key, in ms.
+  // Each sidebar conversation's last update, by key, in ms, and when they
+  // were all last asked for.
   const updated = new Map();
+  let allAt = -Infinity;
+  // The conversation open when the markers were last drawn.
+  let drawnOpen;
   // What you've read, as stored, loaded again when another window changes it.
   let state = null;
   let active = false;
@@ -1070,6 +1102,7 @@ function watchUnread(loadConversations, checks) {
 
   function render() {
     const open = openKey();
+    drawnOpen = open;
     if (state && open && updated.has(open) && !(state.seen[open] >= updated.get(open))) {
       state.seen[open] = updated.get(open);
       readState.save(state);
@@ -1099,7 +1132,12 @@ function watchUnread(loadConversations, checks) {
 
   async function check() {
     if (!active || document.hidden) return;
-    const keys = [...new Set(sidebarConversations().map(({ key }) => key))];
+    let keys = [...new Set(sidebarConversations().map(({ key }) => key))];
+    if (Date.now() - allAt >= Math.max(UNREAD_ALL_MS, checkMs())) {
+      allAt = Date.now();
+    } else {
+      keys = keys.filter((key) => !updated.has(key));
+    }
     if (keys.length) {
       try {
         const infos = await loadConversations(keys);
@@ -1121,9 +1159,12 @@ function watchUnread(loadConversations, checks) {
     }
   }
 
+  // Coming back to the tab asks for every conversation again.
   function onVisibility() {
     render();
-    if (active && !document.hidden) checks.now();
+    if (!active || document.hidden) return;
+    allAt = -Infinity;
+    checks.now();
   }
 
   document.addEventListener('visibilitychange', onVisibility);
@@ -1138,6 +1179,7 @@ function watchUnread(loadConversations, checks) {
       active = on;
       if (on) {
         state = readState.load();
+        allAt = -Infinity;
         checks.now();
         return;
       }
@@ -1145,8 +1187,11 @@ function watchUnread(loadConversations, checks) {
       state = null;
       render();
     },
-    onDomChange() {
+    // Streaming in the chat doesn't change the sidebar, so only changes to
+    // its cards, or opening another conversation, redraw the markers.
+    onDomChange(records) {
       if (!active) return;
+      if (records && !touchesCards(records) && openKey() === drawnOpen) return;
       render();
       checks.request();
     },
@@ -1287,6 +1332,12 @@ function watchCollapseActivity(statusOf) {
   // Each chat item as last read, read again only once it changes, so a
   // streaming run doesn't rescan the whole chat on every update.
   let readItems = new WeakMap();
+  // What was hidden, and whether shown, and the toggles placed, last time, so
+  // only what changes is written.
+  let lastHidden = new Map();
+  let placedToggles = new Set();
+  // Each toggle's look as last drawn.
+  const toggleStates = new WeakMap();
   const find = (current, selector) =>
     current?.isConnected ? current : document.querySelector(selector);
   const running = () => {
@@ -1309,6 +1360,8 @@ function watchCollapseActivity(statusOf) {
     removeElement(COLLAPSE_STYLE_ID);
     toggles = new WeakMap();
     foldRows = new WeakMap();
+    lastHidden = new Map();
+    placedToggles = new Set();
     readItems = new WeakMap();
   }
 
@@ -1349,14 +1402,19 @@ function watchCollapseActivity(statusOf) {
     return entry;
   }
 
-  // Forget the chat items that changed, as the body observer reported them.
+  // Forget the chat items that changed, as the body observer reported them,
+  // and say whether anything in the chat did.
   function forgetChanged(records) {
-    if (!chat?.isConnected) return;
+    if (!chat?.isConnected) return true;
+    let changed = false;
     for (const { target } of records) {
+      if (target !== chat && !chat.contains(target)) continue;
+      changed = true;
       let node = target;
       while (node && node.parentElement !== chat) node = node.parentElement;
       if (node) readItems.delete(node);
     }
+    return changed;
   }
 
   // Runs of items with foldable rows: a stretch starts at any item with some,
@@ -1398,7 +1456,9 @@ function watchCollapseActivity(statusOf) {
     if (label.nextElementSibling !== ours) label.after(ours);
   }
 
-  function apply() {
+  // Changes outside the chat only touch the chip, unless the chat itself is
+  // replaced; everything else reads the chat again.
+  function apply(chatChanged = true) {
     if (disposed) return;
     if (!settings.collapseActivity) {
       if (active) reveal();
@@ -1411,9 +1471,12 @@ function watchCollapseActivity(statusOf) {
       COLLAPSE_STYLE_ID,
       `[${FOLDED_ATTR}]:not([${SHOWN_ATTR}]) { display: none !important; }`,
     );
+    // The chat and its activity chip are only on a conversation's page.
+    if (!openConversationId()) return;
     relabelChip();
+    const previous = chat;
     chat = find(chat, '[data-testid="chat-scroll-container"]');
-    if (!chat) return;
+    if (!chat || (!chatChanged && chat === previous)) return;
     const items = [...chat.children].map(itemEntry);
     pulsing = running();
     // Hide whole items, except the last of each stretch, which holds the
@@ -1433,31 +1496,41 @@ function watchCollapseActivity(statusOf) {
         const nodes = entry.whole && entry !== last ? [entry.item] : entry.foldable;
         for (const node of nodes) hidden.set(node, open);
       }
-      thinking.querySelector('svg').classList.toggle('rotate-180', open);
-      const label = thinking.querySelector('span');
-      setProperty(label, 'textContent', labels.thinking);
       // Canvas's own pulse, which the label stops for people who ask for less
       // motion.
-      label.classList.toggle('animate-pulse', pulsing && last === items.at(-1));
+      const pulse = pulsing && last === items.at(-1);
+      const state = `${open}|${pulse}|${labels.thinking}`;
+      if (toggleStates.get(thinking) !== state) {
+        toggleStates.set(thinking, state);
+        thinking.querySelector('svg').classList.toggle('rotate-180', open);
+        const label = thinking.querySelector('span');
+        setProperty(label, 'textContent', labels.thinking);
+        label.classList.toggle('animate-pulse', pulse);
+      }
       if (last.item.lastElementChild !== thinking) last.item.append(thinking);
     }
-    for (const { item, rows } of items) {
-      for (const node of [item, ...rows]) {
-        toggleAttr(node, FOLDED_ATTR, hidden.has(node));
-        toggleAttr(node, SHOWN_ATTR, hidden.get(node) === true);
-      }
+    for (const node of lastHidden.keys()) {
+      if (hidden.has(node)) continue;
+      node.removeAttribute(FOLDED_ATTR);
+      node.removeAttribute(SHOWN_ATTR);
     }
-    for (const thinking of chat.querySelectorAll(`[${THINKING_ATTR}]`)) {
+    for (const [node, open] of hidden) {
+      if (lastHidden.get(node) === open) continue;
+      toggleAttr(node, FOLDED_ATTR, true);
+      toggleAttr(node, SHOWN_ATTR, open);
+    }
+    lastHidden = hidden;
+    for (const thinking of placedToggles) {
       if (!used.has(thinking)) thinking.remove();
     }
+    placedToggles = used;
   }
 
   return {
-    onDomChange(records = []) {
-      forgetChanged(records);
-      apply();
+    onDomChange(records) {
+      apply(records ? forgetChanged(records) : true);
     },
-    refresh: apply,
+    refresh: () => apply(),
     // Statuses are checked every few seconds; only the open conversation
     // starting or stopping changes anything here.
     onStatus() {
@@ -1513,7 +1586,7 @@ function contentWidth(element) {
   return parseFloat(style.width) - edges;
 }
 
-function fitTable(table) {
+function labelCells(table) {
   const headings = [...(table.tHead?.rows[0]?.cells ?? [])].map((cell) => cell.textContent.trim());
   for (const body of table.tBodies) {
     for (const row of body.rows) {
@@ -1522,10 +1595,24 @@ function fitTable(table) {
       });
     }
   }
-  table.classList.remove(TABLE_STACKED);
-  if (table.offsetWidth > contentWidth(table.parentElement)) table.classList.add(TABLE_STACKED);
 }
 
+// Fit tables together: label them and put them all back, then measure them
+// all, then stack the ones too wide, so the browser lays the page out once
+// rather than once per table.
+function fitTables(tables) {
+  for (const table of tables) {
+    labelCells(table);
+    table.classList.remove(TABLE_STACKED);
+  }
+  const wide = tables.filter((table) => table.offsetWidth > contentWidth(table.parentElement));
+  for (const table of wide) table.classList.add(TABLE_STACKED);
+}
+
+// Stack a Markdown table while it's wider than its scroller, and put it back
+// once it fits, checked as the chat's width or the table changes, e.g. as
+// rows stream in, which also labels the new cells. Only attributes and a
+// class are added, leaving the nodes React owns where they are.
 function watchResponsiveTables() {
   // Each table's scroller, which it's measured against.
   const tables = new Map();
@@ -1539,7 +1626,6 @@ function watchResponsiveTables() {
     table.setAttribute(TABLE_ATTR, '');
     const scroller = table.parentElement;
     tables.set(table, scroller);
-    fitTable(table);
     observer?.observe(table);
     observer?.observe(scroller);
   }
@@ -1556,7 +1642,7 @@ function watchResponsiveTables() {
 
   function recheck() {
     frame = 0;
-    for (const table of pending) if (tables.has(table)) fitTable(table);
+    fitTables([...pending].filter((table) => tables.has(table)));
     pending.clear();
   }
 
@@ -1592,11 +1678,9 @@ function watchResponsiveTables() {
     for (const table of [...tables.keys()]) {
       if (!table.isConnected) untrack(table);
     }
-    for (const table of document.querySelectorAll(
-      `${MARKDOWN_TABLE}:not([${TABLE_ATTR}])`,
-    )) {
-      track(table);
-    }
+    const added = [...document.querySelectorAll(`${MARKDOWN_TABLE}:not([${TABLE_ATTR}])`)];
+    added.forEach(track);
+    if (added.length) fitTables(added);
   }
 
   return { refresh: apply, onDomChange: apply, dispose: stop };
@@ -1684,6 +1768,7 @@ function installableApp(host) {
   // that changes, and the theme root followed for its colour.
   let built = null;
   let root = null;
+  let disposed = false;
   const rootObserver = new MutationObserver(() => apply());
   const scheme = window.matchMedia?.('(prefers-color-scheme: dark)');
 
@@ -1695,7 +1780,8 @@ function installableApp(host) {
     pngs = null;
     touchIcon = null;
     loadImage(svgUrl).then((image) => {
-      if (pngsFor !== svgUrl) return;
+      // Turned off, or disposed, while the icon loaded.
+      if (pngsFor !== svgUrl || !settings.installableApp || disposed) return;
       const drawn = PNG_ICONS.map(([size, purpose]) => ({
         src: image && pngIcon(image, size, purpose),
         sizes: `${size}x${size}`,
@@ -1721,8 +1807,11 @@ function installableApp(host) {
     }
   }
 
+  // Icons are drawn again when it's next on, as a load it was turned off
+  // during is dropped.
   function remove() {
     built = null;
+    pngsFor = null;
     removeElement(MANIFEST_ID);
     removeElement(THEME_META_ID);
     removeElement(TOUCH_ICON_ID);
@@ -1808,7 +1897,12 @@ function installableApp(host) {
     if (next === root) return;
     root = next;
     rootObserver.disconnect();
-    if (root) rootObserver.observe(root, { attributes: true });
+    if (root) {
+      rootObserver.observe(root, {
+        attributes: true,
+        attributeFilter: ['class', 'style', 'data-color-theme'],
+      });
+    }
     apply();
   }
 
@@ -1831,6 +1925,7 @@ function installableApp(host) {
     },
     onDomChange: track,
     dispose() {
+      disposed = true;
       rootObserver.disconnect();
       scheme?.removeEventListener?.('change', apply);
       remove();
@@ -2097,9 +2192,8 @@ function keyboardShortcuts(host, loadConversations) {
       return;
     }
     if (!settings.keyboardShortcuts || event.defaultPrevented || event.isComposing) return;
-    if (canvasDialogOpen()) return;
     const action = actionFor(event, typing(event.target));
-    if (!action) return;
+    if (!action || canvasDialogOpen()) return;
     event.preventDefault();
     action();
   }
@@ -2201,12 +2295,10 @@ function buildSwitch(item, onChange) {
   return block;
 }
 
-// The app's pages, as declared in canvas-extension.json, which Canvas serves
-// under /extensions/<app name>/ and links from its sidebar. The settings
-// page's link is hidden there and goes under Apps in Customize's menu
-// instead; the usage page's shows while its switch is on.
+// The app's settings page, as declared in canvas-extension.json, which Canvas
+// serves under /extensions/<app name>/ and links from its sidebar. The link
+// is hidden there and goes under Apps in Customize's menu instead.
 const SETTINGS_PAGE = 'settings';
-const USAGE_PAGE = 'usage';
 const pageHref = (name, page) => `/extensions/${name}/${page}`;
 const SIDEBAR_STYLE_ID = 'openhands-extras-sidebar';
 
@@ -2284,15 +2376,13 @@ function navLink(host, path, label, icon, active) {
   return link;
 }
 
-// Hide the settings page's sidebar link always, and the usage page's while
-// it's off.
+// Hide the settings page's sidebar link.
 function sidebarLinks(name) {
-  const link = (page) => `[data-testid="sidebar-canvas-extension-${name}-${page}"]`;
-  const apply = () => {
-    const hidden = [link(SETTINGS_PAGE), ...(settings.usagePage ? [] : [link(USAGE_PAGE)])];
-    setStyle(SIDEBAR_STYLE_ID, `${hidden.join(', ')} { display: none !important; }`);
+  const css = `[data-testid="sidebar-canvas-extension-${name}-${SETTINGS_PAGE}"] { display: none !important; }`;
+  return {
+    refresh: () => setStyle(SIDEBAR_STYLE_ID, css),
+    dispose: () => removeElement(SIDEBAR_STYLE_ID),
   };
-  return { refresh: apply, dispose: () => removeElement(SIDEBAR_STYLE_ID) };
 }
 
 // Add the settings page under Apps in Customize's menu, in its desktop
@@ -2421,291 +2511,6 @@ function settingsPage(host, onChange) {
   };
 }
 
-// The usage page: what the Agent Server's conversations cost, from the cost
-// of each of their LLM calls, over a period, by model and by conversation.
-
-
-// Tokens are each conversation's whole total, as the server doesn't date
-// them. It reads up to USAGE_PAGES pages of the latest conversations, once
-// per visit and on Refresh.
-const USAGE_PAGES = 5;
-const USAGE_ROWS = 50;
-const USAGE_PERIODS = [
-  ['today', 'Today'],
-  ['7', '7 days'],
-  ['30', '30 days'],
-  ['all', 'All time'],
-];
-
-// ACP agents report this in place of the model they run.
-const ACP_MODEL = 'acp-managed';
-
-function periodStart(period) {
-  if (period === 'all') return -Infinity;
-  const day = new Date();
-  day.setHours(0, 0, 0, 0);
-  if (period !== 'today') day.setDate(day.getDate() - (Number(period) - 1));
-  return day.getTime();
-}
-
-const sumTokens = (usage) =>
-  ['prompt_tokens', 'completion_tokens', 'cache_read_tokens', 'cache_write_tokens']
-    .map((key) => Number(usage?.[key]) || 0)
-    .reduce((sum, count) => sum + count, 0);
-
-// A conversation's costs, by model, each with its time, or null where the
-// server has only a total, and its tokens.
-function conversationUsage(info) {
-  const acp = info.agent?.kind === 'ACPAgent';
-  const runModel = acp
-    ? info.current_model_name || info.current_model_id || info.agent?.acp_model || 'ACP agent'
-    : info.agent?.llm?.model || 'Unknown model';
-  const costs = [];
-  let tokens = 0;
-  for (const metrics of Object.values(info.stats?.usage_to_metrics ?? {})) {
-    const model =
-      metrics?.model_name && metrics.model_name !== ACP_MODEL ? metrics.model_name : runModel;
-    tokens += sumTokens(metrics?.accumulated_token_usage);
-    const dated = Array.isArray(metrics?.costs) ? metrics.costs : [];
-    for (const { cost, timestamp } of dated) {
-      const at = Number(timestamp) * 1000;
-      costs.push({ model, cost: Number(cost) || 0, at: Number.isFinite(at) ? at : null });
-    }
-    if (!dated.length && metrics?.accumulated_cost) {
-      costs.push({ model, cost: Number(metrics.accumulated_cost) || 0, at: null });
-    }
-  }
-  return { id: info.id, title: info.title || 'Untitled', acp, tokens, costs };
-}
-
-async function loadUsage(host) {
-  const conversations = [];
-  let pageId = null;
-  for (let page = 0; page < USAGE_PAGES; page++) {
-    const query = new URLSearchParams({ limit: '100', sort_order: 'UPDATED_AT_DESC' });
-    if (pageId) query.set('page_id', pageId);
-    const result = await host.agentServer.request({
-      path: `/api/conversations/search?${query}`,
-    });
-    if (!Array.isArray(result?.items)) throw new Error('Unexpected conversations');
-    conversations.push(...result.items.filter(Boolean).map(conversationUsage));
-    pageId = result.next_page_id;
-    if (!pageId) break;
-  }
-  return { conversations, more: !!pageId };
-}
-
-// Undated costs only count for all time, and are totalled apart otherwise.
-function summarizeUsage(conversations, since) {
-  const models = new Map();
-  const rows = [];
-  let total = 0;
-  let undated = 0;
-  for (const conversation of conversations) {
-    let cost = 0;
-    for (const entry of conversation.costs) {
-      if (since !== -Infinity && entry.at === null) undated += entry.cost;
-      if (since !== -Infinity && !(entry.at >= since)) continue;
-      cost += entry.cost;
-      models.set(entry.model, (models.get(entry.model) ?? 0) + entry.cost);
-    }
-    if (cost > 0) rows.push({ ...conversation, cost });
-    total += cost;
-  }
-  rows.sort((a, b) => b.cost - a.cost);
-  return { total, undated, rows, models: [...models].sort((a, b) => b[1] - a[1]) };
-}
-
-function usagePage(host) {
-  let period = '30';
-
-  function mount({ container }) {
-    let disposed = false;
-    let data = null;
-    let error = null;
-    // Only the latest load, e.g. after Refresh, is shown.
-    let loads = 0;
-    let loadedAt = null;
-    const language = canvasLanguage();
-    const money = new Intl.NumberFormat(language, { style: 'currency', currency: 'USD' });
-    const count = new Intl.NumberFormat(language, { notation: 'compact', maximumFractionDigits: 1 });
-    const cost = (value) => (value > 0 && value < 0.01 ? `< ${money.format(0.01)}` : money.format(value));
-
-    const refresh = textButton('extras-usage-refresh', 'Refresh', () => load(), 'shrink-0 rounded-md border border-border px-3 py-1.5 text-contrast hover:bg-surface-raised');
-    // The period buttons stay, so focus stays on the one chosen.
-    const periods = el(
-      'div',
-      'flex flex-wrap gap-2',
-      ...USAGE_PERIODS.map(([value, label]) => {
-        const button = el('button', '', label);
-        button.type = 'button';
-        button.dataset.period = value;
-        button.addEventListener('click', () => {
-          period = value;
-          render();
-        });
-        return button;
-      }),
-    );
-    periods.setAttribute('role', 'group');
-    periods.setAttribute('aria-label', 'Period');
-    const status = el('p', 'sr-only');
-    status.setAttribute('role', 'status');
-    const body = el('div', 'flex min-w-0 flex-col gap-6');
-    const root = el(
-      'div',
-      'px-4 pt-8 pb-12',
-      el(
-        'div',
-        'mx-auto flex w-full min-w-0 max-w-200 flex-col gap-6',
-        el(
-          'div',
-          'flex min-w-0 items-start justify-between gap-4',
-          pageHeader('Usage', 'What your conversations on this Agent Server cost, from its own records of each LLM call.'),
-          refresh,
-        ),
-        periods,
-        status,
-        body,
-      ),
-    );
-    root.setAttribute(OWN_ATTR, '');
-    const periodLabel = () => USAGE_PERIODS.find(([value]) => value === period)[1];
-
-    function table(headings, rows) {
-      const head = headings.map((heading, index) =>
-        el('th', `py-2 font-normal text-tertiary-light ${index ? 'text-right' : 'text-left'}`, heading),
-      );
-      const body = rows.map((cells) =>
-        el('tr', '', ...cells.map((cell, index) =>
-          el('td', `border-t border-border py-2 ${index ? 'text-right tabular-nums whitespace-nowrap pl-4' : 'min-w-0 break-words'}`, cell),
-        )),
-      );
-      return el('table', 'w-full text-sm', el('thead', '', el('tr', '', ...head)), el('tbody', '', ...body));
-    }
-
-    function render() {
-      for (const button of periods.children) {
-        const on = button.dataset.period === period;
-        button.setAttribute('aria-pressed', String(on));
-        button.className = pillClass(on);
-      }
-      const loading = settings.usagePage && !data && !error;
-      refresh.disabled = loading;
-      body.setAttribute('aria-busy', String(loading));
-      if (!settings.usagePage) {
-        const link = canvasLink(
-          host,
-          pageHref(host.extension.name, SETTINGS_PAGE),
-          'text-link hover:underline',
-          'Extras settings',
-        );
-        const off = note('The usage page is off. Turn it on in ');
-        off.append(link, '.');
-        body.replaceChildren(off);
-        return;
-      }
-      if (error) {
-        const message = `Couldn't load your conversations: ${error}`;
-        status.textContent = message;
-        body.replaceChildren(note(message));
-        return;
-      }
-      if (!data) {
-        status.textContent = 'Loading…';
-        body.replaceChildren(note('Loading…'));
-        return;
-      }
-      const { total, undated, rows, models } = summarizeUsage(
-        data.conversations,
-        periodStart(period),
-      );
-      status.textContent = `${cost(total)} in ${periodLabel().toLowerCase()}`;
-      const stats = el(
-        'dl',
-        'grid gap-3',
-        ...[
-          ['Cost', cost(total)],
-          ['Conversations', String(rows.length)],
-          ['Average per conversation', rows.length ? cost(total / rows.length) : '–'],
-        ].map(([label, value]) =>
-          el(
-            'div',
-            'rounded-xl border border-border bg-base-secondary p-4',
-            el('dt', 'text-sm text-tertiary-light', label),
-            el('dd', 'mt-1 text-xl font-semibold text-contrast tabular-nums', value),
-          ),
-        ),
-      );
-      stats.style.gridTemplateColumns = 'repeat(auto-fit, minmax(10rem, 1fr))';
-      if (!rows.length) {
-        body.replaceChildren(stats, note(undated > 0 ? `No dated costs in this period; ${cost(undated)} more has no date, so only All time counts it.` : 'No costs in this period.'));
-        return;
-      }
-      const titleLink = (row) => {
-        return canvasLink(host, `/conversations/${conversationKey(row.id)}`, 'text-contrast hover:underline', row.title);
-      };
-      const notes = [];
-      if (undated > 0) {
-        notes.push(note(`${cost(undated)} more has no date, so only All time counts it.`));
-      }
-      if (rows.some((row) => row.acp)) {
-        notes.push(note("ACP agents' costs are what the same calls would cost through the API; their subscription may bill differently."));
-      }
-      if (data.more) {
-        notes.push(note(`Only your latest ${USAGE_PAGES * 100} conversations are counted.`));
-      }
-      notes.push(
-        note(`Loaded at ${loadedAt.toLocaleTimeString(language, { hour: 'numeric', minute: '2-digit' })}.`),
-      );
-      body.replaceChildren(
-        stats,
-        pageSection('By model', table(['Model', 'Cost'], models.map(([model, value]) => [model, cost(value)]))),
-        pageSection(
-          'Conversations',
-          table(
-            ['Conversation', 'Tokens, all time', 'Cost'],
-            rows.slice(0, USAGE_ROWS).map((row) => [titleLink(row), count.format(row.tokens), cost(row.cost)]),
-          ),
-        ),
-        ...notes,
-      );
-    }
-
-    async function load() {
-      if (!settings.usagePage) {
-        render();
-        return;
-      }
-      const current = (loads += 1);
-      data = null;
-      error = null;
-      render();
-      let next = null;
-      let failed = null;
-      try {
-        next = await loadUsage(host);
-      } catch (failure) {
-        failed = failure?.message || 'the Agent Server did not answer.';
-      }
-      if (disposed || current !== loads) return;
-      data = next;
-      error = failed;
-      loadedAt = new Date();
-      render();
-    }
-
-    container.append(root);
-    load();
-    return () => {
-      disposed = true;
-      root.remove();
-    };
-  }
-
-  return { mount };
-}
-
 // Extras: Agent Canvas tweaks, each a setting in settings.js, turned on from
 // this app's settings page under Customize and saved in the browser's
 // localStorage. The README says what each does. Canvas loads an app from one
@@ -2739,10 +2544,7 @@ function activate(host) {
   });
   // Before anything starts, as Canvas throws for a page its copy of the
   // manifest doesn't declare.
-  const unregisterPages = [
-    host.registerPage(SETTINGS_PAGE, settingsView.mount),
-    host.registerPage(USAGE_PAGE, usagePage(host).mount),
-  ];
+  const unregisterSettings = host.registerPage(SETTINGS_PAGE, settingsView.mount);
   // Hiding "Running" and "Reading" pulses on the open conversation's status.
   // The status and unread checks run together, so their loads share one
   // request.
@@ -2753,9 +2555,9 @@ function activate(host) {
     await Promise.allSettled(features.map((feature) => feature.check?.()));
     clearTimeout(poll);
     poll = !disposed && features.some((feature) => feature.polling?.())
-      ? setTimeout(checks.request, CHECK_MS)
+      ? setTimeout(checks.request, checkMs())
       : 0;
-  }, CHECK_MS);
+  }, checkMs);
   const collapseActivity = watchCollapseActivity((id) => agentStatus.statusOf(id));
   const agentStatus = watchAgentStatus(host, loadConversations, checks, () =>
     collapseActivity.onStatus(),
@@ -2795,14 +2597,30 @@ function activate(host) {
     window.addEventListener(type, onInput, true);
   }
   each('refresh');
-  // One body observer for all: Canvas renders the app card on Customize >
-  // Apps, re-renders the chat as a run's events stream in, and may re-mount
-  // its themed root. Changes to only our own elements are the features'
+  // One body observer for all: Canvas renders Customize's menu, re-renders
+  // the chat as a run's events stream in, and may re-mount its themed root. Changes to only our own elements are the features'
   // doing, and would just run them again for nothing.
+  //
+  // Canvas keeps rendering in a hidden tab, where nobody sees the page: only
+  // the agent status hears of changes there, to check runs it follows, and
+  // the rest catch up once the tab shows again.
+  let missed = false;
   const observer = new MutationObserver((records) => {
-    if (!records.every(ownChange)) each('onDomChange', records);
+    if (records.every(ownChange)) return;
+    if (document.hidden) {
+      missed = true;
+      agentStatus.onDomChange();
+    } else {
+      each('onDomChange', records);
+    }
   });
   observer.observe(document.body, { childList: true, subtree: true });
+  const onVisibility = () => {
+    if (document.hidden || !missed) return;
+    missed = false;
+    each('onDomChange');
+  };
+  document.addEventListener('visibilitychange', onVisibility);
   // Each feature cleans up even if one before it fails, whose error is then
   // passed on for Canvas to report.
   const dispose = () => {
@@ -2810,9 +2628,10 @@ function activate(host) {
     disposed = true;
     if (window[INSTANCE] === dispose) delete window[INSTANCE];
     observer.disconnect();
+    document.removeEventListener('visibilitychange', onVisibility);
     checks.cancel();
     clearTimeout(poll);
-    for (const unregister of unregisterPages) unregister?.();
+    unregisterSettings?.();
     window.removeEventListener('storage', onStorage);
     for (const type of ['pointerdown', 'keydown']) {
       window.removeEventListener(type, onInput, true);

@@ -42,7 +42,7 @@ function contentWidth(element) {
   return parseFloat(style.width) - edges;
 }
 
-function fitTable(table) {
+function labelCells(table) {
   const headings = [...(table.tHead?.rows[0]?.cells ?? [])].map((cell) => cell.textContent.trim());
   for (const body of table.tBodies) {
     for (const row of body.rows) {
@@ -51,15 +51,25 @@ function fitTable(table) {
       });
     }
   }
-  table.classList.remove(TABLE_STACKED);
-  if (table.offsetWidth > contentWidth(table.parentElement)) table.classList.add(TABLE_STACKED);
 }
 
-export // Stack a Markdown table while it's wider than its scroller, and put it back
+// Fit tables together: label them and put them all back, then measure them
+// all, then stack the ones too wide, so the browser lays the page out once
+// rather than once per table.
+function fitTables(tables) {
+  for (const table of tables) {
+    labelCells(table);
+    table.classList.remove(TABLE_STACKED);
+  }
+  const wide = tables.filter((table) => table.offsetWidth > contentWidth(table.parentElement));
+  for (const table of wide) table.classList.add(TABLE_STACKED);
+}
+
+// Stack a Markdown table while it's wider than its scroller, and put it back
 // once it fits, checked as the chat's width or the table changes, e.g. as
 // rows stream in, which also labels the new cells. Only attributes and a
 // class are added, leaving the nodes React owns where they are.
-function watchResponsiveTables() {
+export function watchResponsiveTables() {
   // Each table's scroller, which it's measured against.
   const tables = new Map();
   // Tables to check again on the next frame: ResizeObserver reports an error
@@ -72,7 +82,6 @@ function watchResponsiveTables() {
     table.setAttribute(TABLE_ATTR, '');
     const scroller = table.parentElement;
     tables.set(table, scroller);
-    fitTable(table);
     observer?.observe(table);
     observer?.observe(scroller);
   }
@@ -89,7 +98,7 @@ function watchResponsiveTables() {
 
   function recheck() {
     frame = 0;
-    for (const table of pending) if (tables.has(table)) fitTable(table);
+    fitTables([...pending].filter((table) => tables.has(table)));
     pending.clear();
   }
 
@@ -125,11 +134,9 @@ function watchResponsiveTables() {
     for (const table of [...tables.keys()]) {
       if (!table.isConnected) untrack(table);
     }
-    for (const table of document.querySelectorAll(
-      `${MARKDOWN_TABLE}:not([${TABLE_ATTR}])`,
-    )) {
-      track(table);
-    }
+    const added = [...document.querySelectorAll(`${MARKDOWN_TABLE}:not([${TABLE_ATTR}])`)];
+    added.forEach(track);
+    if (added.length) fitTables(added);
   }
 
   return { refresh: apply, onDomChange: apply, dispose: stop };

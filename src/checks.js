@@ -2,11 +2,15 @@
 // need them.
 
 import { conversationKey } from './canvas.js';
+import { settings, SWITCHES } from './settings.js';
 
-// Status and unread checks run together, sharing one request, at most this
-// often, and poll this often while a run is going, while counting the
-// conversations waiting for confirmation, and for the sidebar's changes.
-export const CHECK_MS = 20000;
+// Status and unread checks run together, sharing one request, at most once
+// per Check for changes every, and poll that often while a run is going,
+// while counting the conversations waiting for confirmation, and for the
+// sidebar's changes.
+const CHECK_INTERVALS = SWITCHES.find(({ key }) => key === 'checkInterval').options;
+export const checkMs = () =>
+  CHECK_INTERVALS.find(([value]) => value === settings.checkInterval)?.[2] ?? 10000;
 
 // Conversations from the Agent Server, by id, with every load asked for at
 // the same moment, e.g. by the agent status and unread markers on the same
@@ -35,7 +39,7 @@ export function conversationLoader(host) {
   };
 }
 
-// Run task at most once per gap, folding the calls in between into one run at
+// Run task at most once per gap(), folding the calls in between into one run at
 // the end of it, and never two at once: a call during a run queues another,
 // which now() runs as soon as the first is done.
 export function throttle(task, gap) {
@@ -68,7 +72,7 @@ export function throttle(task, gap) {
   }
 
   function request() {
-    const wait = last + gap - Date.now();
+    const wait = last + gap() - Date.now();
     if (wait <= 0) {
       run();
     } else if (!trailing) {

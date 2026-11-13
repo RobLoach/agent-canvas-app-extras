@@ -45,7 +45,6 @@ const SWITCH_KEYS = [
   'biggerTapTargets',
   'installableApp',
   'mobileFixes',
-  'usagePage',
 ];
 
 test('leaves its card on Customize > Apps as Canvas renders it', async (t) => {
@@ -75,14 +74,10 @@ test("adds Extras under Apps in Customize's menu", async (t) => {
   assert.equal(page.document.querySelector('[data-testid="sidebar-extensions-extras"]'), null);
 });
 
-test("hides the settings page's sidebar link, and the usage page's while it's off", async (t) => {
+test("hides the settings page's sidebar link", async (t) => {
   const { page } = await start(t);
-  const style = () => page.document.getElementById('openhands-extras-sidebar').textContent;
-  assert.match(style(), /agent-canvas-app-extras-settings/);
-  assert.match(style(), /agent-canvas-app-extras-usage/);
-
-  await page.changeSettings({ usagePage: true });
-  assert.doesNotMatch(style(), /agent-canvas-app-extras-usage/);
+  const style = page.document.getElementById('openhands-extras-sidebar').textContent;
+  assert.match(style, /sidebar-canvas-extension-agent-canvas-app-extras-settings/);
 });
 
 test('lists every switch under its group on the settings page, beside Customize', async (t) => {
@@ -91,7 +86,7 @@ test('lists every switch under its group on the settings page, beside Customize'
   await openSettings(page, host);
 
   const headings = [...page.document.querySelectorAll('h3')].map((h) => h.textContent);
-  assert.deepEqual(headings, ['Chat', 'Notifications', 'Accessibility', 'Phone and app', 'Pages']);
+  assert.deepEqual(headings, ['Chat', 'Notifications', 'Accessibility', 'Phone and app']);
   for (const key of SWITCH_KEYS) {
     assert.equal(switchFor(page, key).checked, false, key);
     assert.ok(hintFor(page, key), `${key} has a description`);
@@ -279,4 +274,17 @@ test('shows Show keyboard shortcuts only while they are on', async (t) => {
   switchFor(page, 'keyboardShortcuts').click();
   await flush();
   assert.equal(button().hidden, false);
+});
+
+test('offers how often to check for changes, every 10 seconds by default', async (t) => {
+  const page = setupPage(t, { url: SETTINGS_URL });
+  await openSettings(page);
+
+  const select = page.document.querySelector('[data-testid="extras-checkInterval-select"]');
+  assert.equal(select.value, '10s');
+  assert.deepEqual(
+    [...select.options].map((option) => option.textContent),
+    ['5 seconds', '10 seconds', '20 seconds', '30 seconds', '1 minute', '2 minutes', '3 minutes', '5 minutes'],
+  );
+  assert.equal(select.closest('section').querySelector('h3').textContent, 'Notifications');
 });

@@ -95,12 +95,10 @@ function buildSwitch(item, onChange) {
   return block;
 }
 
-// The app's pages, as declared in canvas-extension.json, which Canvas serves
-// under /extensions/<app name>/ and links from its sidebar. The settings
-// page's link is hidden there and goes under Apps in Customize's menu
-// instead; the usage page's shows while its switch is on.
+// The app's settings page, as declared in canvas-extension.json, which Canvas
+// serves under /extensions/<app name>/ and links from its sidebar. The link
+// is hidden there and goes under Apps in Customize's menu instead.
 export const SETTINGS_PAGE = 'settings';
-export const USAGE_PAGE = 'usage';
 export const pageHref = (name, page) => `/extensions/${name}/${page}`;
 const SIDEBAR_STYLE_ID = 'openhands-extras-sidebar';
 
@@ -178,15 +176,13 @@ function navLink(host, path, label, icon, active) {
   return link;
 }
 
-// Hide the settings page's sidebar link always, and the usage page's while
-// it's off.
+// Hide the settings page's sidebar link.
 export function sidebarLinks(name) {
-  const link = (page) => `[data-testid="sidebar-canvas-extension-${name}-${page}"]`;
-  const apply = () => {
-    const hidden = [link(SETTINGS_PAGE), ...(settings.usagePage ? [] : [link(USAGE_PAGE)])];
-    setStyle(SIDEBAR_STYLE_ID, `${hidden.join(', ')} { display: none !important; }`);
+  const css = `[data-testid="sidebar-canvas-extension-${name}-${SETTINGS_PAGE}"] { display: none !important; }`;
+  return {
+    refresh: () => setStyle(SIDEBAR_STYLE_ID, css),
+    dispose: () => removeElement(SIDEBAR_STYLE_ID),
   };
-  return { refresh: apply, dispose: () => removeElement(SIDEBAR_STYLE_ID) };
 }
 
 // Add the settings page under Apps in Customize's menu, in its desktop

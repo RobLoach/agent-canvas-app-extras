@@ -12,7 +12,7 @@ import { ownChange } from './dom.js';
 import { STORAGE_KEY } from './storage.js';
 import { loadSettings, saveSettings, settings } from './settings.js';
 import { closeAudio, unlockAudio } from './audio.js';
-import { CHECK_MS, conversationLoader, throttle } from './checks.js';
+import { checkMs, conversationLoader, throttle } from './checks.js';
 import { watchAgentStatus } from './status.js';
 import { watchUnread } from './unread.js';
 import { watchCollapseActivity } from './collapse-activity.js';
@@ -32,11 +32,9 @@ import {
   SETTINGS_PAGE,
   settingsPage,
   sidebarLinks,
-  USAGE_PAGE,
   watchCustomizeMenu,
 } from './pages.js';
 import { keyboardShortcuts } from './shortcuts.js';
-import { usagePage } from './usage.js';
 
 // The running copy's dispose, on the page's window. Canvas disposes an app
 // before activating it again; should a copy still be running anyway, the new
@@ -60,10 +58,7 @@ export function activate(host) {
   });
   // Before anything starts, as Canvas throws for a page its copy of the
   // manifest doesn't declare.
-  const unregisterPages = [
-    host.registerPage(SETTINGS_PAGE, settingsView.mount),
-    host.registerPage(USAGE_PAGE, usagePage(host).mount),
-  ];
+  const unregisterSettings = host.registerPage(SETTINGS_PAGE, settingsView.mount);
   // Hiding "Running" and "Reading" pulses on the open conversation's status.
   // The status and unread checks run together, so their loads share one
   // request.
@@ -74,9 +69,9 @@ export function activate(host) {
     await Promise.allSettled(features.map((feature) => feature.check?.()));
     clearTimeout(poll);
     poll = !disposed && features.some((feature) => feature.polling?.())
-      ? setTimeout(checks.request, CHECK_MS)
+      ? setTimeout(checks.request, checkMs())
       : 0;
-  }, CHECK_MS);
+  }, checkMs);
   const collapseActivity = watchCollapseActivity((id) => agentStatus.statusOf(id));
   const agentStatus = watchAgentStatus(host, loadConversations, checks, () =>
     collapseActivity.onStatus(),
@@ -116,14 +111,30 @@ export function activate(host) {
     window.addEventListener(type, onInput, true);
   }
   each('refresh');
-  // One body observer for all: Canvas renders the app card on Customize >
-  // Apps, re-renders the chat as a run's events stream in, and may re-mount
-  // its themed root. Changes to only our own elements are the features'
+  // One body observer for all: Canvas renders Customize's menu, re-renders
+  // the chat as a run's events stream in, and may re-mount its themed root. Changes to only our own elements are the features'
   // doing, and would just run them again for nothing.
+  //
+  // Canvas keeps rendering in a hidden tab, where nobody sees the page: only
+  // the agent status hears of changes there, to check runs it follows, and
+  // the rest catch up once the tab shows again.
+  let missed = false;
   const observer = new MutationObserver((records) => {
-    if (!records.every(ownChange)) each('onDomChange', records);
+    if (records.every(ownChange)) return;
+    if (document.hidden) {
+      missed = true;
+      agentStatus.onDomChange();
+    } else {
+      each('onDomChange', records);
+    }
   });
   observer.observe(document.body, { childList: true, subtree: true });
+  const onVisibility = () => {
+    if (document.hidden || !missed) return;
+    missed = false;
+    each('onDomChange');
+  };
+  document.addEventListener('visibilitychange', onVisibility);
   // Each feature cleans up even if one before it fails, whose error is then
   // passed on for Canvas to report.
   const dispose = () => {
@@ -131,9 +142,10 @@ export function activate(host) {
     disposed = true;
     if (window[INSTANCE] === dispose) delete window[INSTANCE];
     observer.disconnect();
+    document.removeEventListener('visibilitychange', onVisibility);
     checks.cancel();
     clearTimeout(poll);
-    for (const unregister of unregisterPages) unregister?.();
+    unregisterSettings?.();
     window.removeEventListener('storage', onStorage);
     for (const type of ['pointerdown', 'keydown']) {
       window.removeEventListener(type, onInput, true);

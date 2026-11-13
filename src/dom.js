@@ -43,10 +43,6 @@ export const FOCUS_RING = 'focus-visible:outline-2 focus-visible:outline-offset-
 export const HAS_FOCUS_RING =
   'has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-focus';
 
-// A round toggle, as Font size and the usage page's periods draw theirs.
-export const pillClass = (on, focus = FOCUS_RING) =>
-  `cursor-pointer rounded-full border px-3 py-1 text-sm ${focus} ${on ? 'border-contrast bg-contrast text-contrast-foreground' : 'border-border text-muted hover:text-contrast'}`;
-
 export function textButton(testid, text, onClick, look = 'underline') {
   const button = el('button', `w-fit cursor-pointer rounded-sm text-sm ${look} ${FOCUS_RING}`, text);
   button.type = 'button';
@@ -65,7 +61,6 @@ export const pageHeader = (title, description) =>
   );
 export const pageSection = (title, ...children) =>
   el('section', 'flex min-w-0 flex-col gap-3', el('h3', 'text-base font-semibold text-foreground', title), ...children);
-export const note = (text) => el('p', 'text-sm text-tertiary-light', text);
 
 // The elements this app adds to Canvas's page body.
 const OWN_SELECTOR = `[${OWN_ATTR}], [${THINKING_ATTR}], [${CHIP_LABEL_ATTR}], [${UNREAD_ATTR}]`;

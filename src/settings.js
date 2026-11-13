@@ -15,7 +15,7 @@ import {
 // status is 'follow' for a feature that needs conversation statuses, and
 // 'count' for one that also needs how many conversations need your input.
 // The settings page lists them under their group, in this order.
-export const SWITCH_GROUPS = ['Chat', 'Notifications', 'Accessibility', 'Phone and app', 'Pages'];
+export const SWITCH_GROUPS = ['Chat', 'Notifications', 'Accessibility', 'Phone and app'];
 export const SWITCHES = [
   {
     key: 'wideChat',
@@ -79,6 +79,25 @@ export const SWITCHES = [
     description: 'Mark the conversations in the sidebar that changed since you last opened them.',
   },
   {
+    key: 'checkInterval',
+    group: 'Notifications',
+    label: 'Check for changes every',
+    description:
+      'How often to ask the Agent Server about runs and unread conversations, while a setting above needs it.',
+    // Choices as [value, label, the time between checks in ms].
+    options: [
+      ['5s', '5 seconds', 5000],
+      ['10s', '10 seconds', 10000],
+      ['20s', '20 seconds', 20000],
+      ['30s', '30 seconds', 30000],
+      ['1m', '1 minute', 60000],
+      ['2m', '2 minutes', 120000],
+      ['3m', '3 minutes', 180000],
+      ['5m', '5 minutes', 300000],
+    ],
+    default: '10s',
+  },
+  {
     key: 'fontSize',
     group: 'Accessibility',
     label: 'Font size',
@@ -125,12 +144,6 @@ export const SWITCHES = [
     group: 'Phone and app',
     label: 'Mobile fixes',
     description: "Fit Canvas's sidebar, dialogs, buttons and message box to phones and tablets.",
-  },
-  {
-    key: 'usagePage',
-    group: 'Pages',
-    label: 'Usage page',
-    description: 'Add a Usage page to the sidebar, with what your conversations cost.',
   },
 ];
 const DEFAULT_SETTINGS = Object.fromEntries(
