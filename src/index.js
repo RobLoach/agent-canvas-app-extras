@@ -32,7 +32,6 @@ import {
   settingsPage,
   sidebarLinks,
   USAGE_PAGE,
-  watchAppCard,
   watchCustomizeMenu,
 } from './pages.js';
 import { keyboardShortcuts } from './shortcuts.js';
@@ -82,7 +81,6 @@ export function activate(host) {
     quietActivity.onStatus(),
   );
   const features = [
-    watchAppCard(host),
     watchCustomizeMenu(host),
     sidebarLinks(host.extension.name),
     settingsView,

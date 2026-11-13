@@ -2,7 +2,6 @@
 // Helpers for the elements this app adds to Canvas's page, and the classes
 // it borrows from Canvas's own components.
 
-const SECTION_ID = 'openhands-extras-settings';
 const THINKING_ATTR = 'data-extras-thinking';
 const CHIP_LABEL_ATTR = 'data-extras-chip-label';
 const UNREAD_ATTR = 'data-extras-unread';
@@ -70,7 +69,7 @@ const pageSection = (title, ...children) =>
 const note = (text) => el('p', 'text-sm text-tertiary-light', text);
 
 // The elements this app adds to Canvas's page body.
-const OWN_SELECTOR = `#${SECTION_ID}, [${OWN_ATTR}], [${THINKING_ATTR}], [${CHIP_LABEL_ATTR}], [${UNREAD_ATTR}]`;
+const OWN_SELECTOR = `[${OWN_ATTR}], [${THINKING_ATTR}], [${CHIP_LABEL_ATTR}], [${UNREAD_ATTR}]`;
 const ownNode = (node) => node.nodeType === Node.ELEMENT_NODE && node.matches(OWN_SELECTOR);
 const ownChange = (record) =>
   !!record.target.closest?.(OWN_SELECTOR) ||
@@ -2071,8 +2070,8 @@ function keyboardShortcuts(host) {
   };
 }
 
-// The settings page, its place in Customize's menu and on this app's card,
-// and the switches it shows.
+// The settings page, its place in Customize's menu, and the switches it
+// shows.
 
 
 // Class strings mirror Canvas's ToggleSwitchVisual (src/ui/toggle-switch.tsx)
@@ -2265,41 +2264,6 @@ function watchCustomizeMenu(host) {
     refresh: place,
     onDomChange: place,
     dispose: () => ours().forEach((link) => link.remove()),
-  };
-}
-
-// This app's card on Customize > Apps links to the settings page. React may
-// insert its own nodes before the card's footer later, so the link is placed
-// again whenever it's displaced.
-function watchAppCard(host) {
-  const name = host.extension.name;
-  const cardSelector = `article[data-testid="canvas-extension-card-${name}"]`;
-  function place() {
-    // Skip the DOM search everywhere but Customize > Apps (e.g. while chatting).
-    if (!/\/apps\/?$/.test(location.pathname)) return;
-    const footer = document.querySelector(`${cardSelector} > footer`);
-    if (!footer || footer.previousElementSibling?.id === SECTION_ID) return;
-    removeElement(SECTION_ID);
-    const link = canvasLink(
-      host,
-      pageHref(name, SETTINGS_PAGE),
-      `w-fit rounded-sm text-sm text-link hover:underline ${FOCUS_RING}`,
-      'Extras settings',
-    );
-    link.dataset.testid = 'extras-open-settings';
-    const section = el(
-      'section',
-      'flex min-w-0 flex-col gap-1 border-t border-border pt-3',
-      link,
-      el('p', 'text-xs leading-relaxed text-tertiary-light', 'Turn its features on and off, also under Customize > Extras.'),
-    );
-    section.id = SECTION_ID;
-    footer.before(section);
-  }
-  return {
-    refresh: place,
-    onDomChange: place,
-    dispose: () => removeElement(SECTION_ID),
   };
 }
 
@@ -2725,7 +2689,6 @@ function activate(host) {
     quietActivity.onStatus(),
   );
   const features = [
-    watchAppCard(host),
     watchCustomizeMenu(host),
     sidebarLinks(host.extension.name),
     settingsView,

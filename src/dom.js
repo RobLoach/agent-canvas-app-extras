@@ -1,7 +1,6 @@
 // Helpers for the elements this app adds to Canvas's page, and the classes
 // it borrows from Canvas's own components.
 
-export const SECTION_ID = 'openhands-extras-settings';
 export const THINKING_ATTR = 'data-extras-thinking';
 export const CHIP_LABEL_ATTR = 'data-extras-chip-label';
 export const UNREAD_ATTR = 'data-extras-unread';
@@ -69,7 +68,7 @@ export const pageSection = (title, ...children) =>
 export const note = (text) => el('p', 'text-sm text-tertiary-light', text);
 
 // The elements this app adds to Canvas's page body.
-const OWN_SELECTOR = `#${SECTION_ID}, [${OWN_ATTR}], [${THINKING_ATTR}], [${CHIP_LABEL_ATTR}], [${UNREAD_ATTR}]`;
+const OWN_SELECTOR = `[${OWN_ATTR}], [${THINKING_ATTR}], [${CHIP_LABEL_ATTR}], [${UNREAD_ATTR}]`;
 const ownNode = (node) => node.nodeType === Node.ELEMENT_NODE && node.matches(OWN_SELECTOR);
 export const ownChange = (record) =>
   !!record.target.closest?.(OWN_SELECTOR) ||
