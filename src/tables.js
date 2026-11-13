@@ -8,19 +8,24 @@ const TABLE_ATTR = 'data-extras-table';
 
 // Canvas's Markdown tables, each in a scroller that lets it run wider than
 // the chat. A stacked table is marked with TABLE_STACKED, and each cell
-// carries its column's heading in data-th. These undo Canvas's widths,
-// borders and nowrap, and rule a line between rows.
+// carries its column's heading in data-th, floated into the cell's padding
+// so the cell's own text, bold, code and links flow as one paragraph beside
+// it. These undo Canvas's widths, borders and nowrap, and rule a line between
+// rows.
 const MARKDOWN_TABLE = '[data-testid="markdown-table-scroll"] > table';
 const TABLE_STACKED = 'extras-stacked';
 const STACKED = `[${TABLE_ATTR}].${TABLE_STACKED}`;
 const RESPONSIVE_TABLES_CSS = `
+${STACKED}, ${STACKED} tbody, ${STACKED} tr { display: block; }
 ${STACKED} { width: 100%; min-width: 0; }
 ${STACKED} thead, ${STACKED} tbody th { display: none; }
 ${STACKED} tbody td {
-  display: flex; gap: 0.75rem; max-width: none; white-space: normal; border: none;
+  display: flow-root; max-width: none; white-space: normal; border: none;
+  padding-left: calc(8em + 1.5rem);
 }
 ${STACKED} tbody td::before {
-  content: attr(data-th); flex: 0 0 8em; font-weight: 600; overflow-wrap: anywhere;
+  content: attr(data-th); float: left; width: 8em; margin-left: calc(-8em - 0.75rem);
+  font-weight: 600; overflow-wrap: anywhere;
 }
 ${STACKED} tbody tr + tr td:first-child {
   border-top: 1px solid color-mix(in srgb, currentColor 20%, transparent);

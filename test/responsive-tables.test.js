@@ -155,3 +155,14 @@ test('puts every table back when switched off or disabled', async (t) => {
   dispose();
   clean();
 });
+
+test("lets a stacked cell's text, bold, code and links flow as one paragraph", async (t) => {
+  const page = openChat(t, { wide: 500 });
+  await activateExtension(page, fakeHost());
+
+  const cell = page.table('wide').querySelector('tbody td');
+  const rules = [...style(page).sheet.cssRules].filter((rule) => cell.matches(rule.selectorText));
+  // Flex or grid would make each piece of inline content its own column.
+  assert.ok(rules.some((rule) => rule.style.display === 'flow-root'));
+  assert.ok(rules.every((rule) => !/flex|grid/.test(rule.style.display)));
+});
