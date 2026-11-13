@@ -38,7 +38,7 @@ An [OpenHands](https://www.openhands.dev/) Agent Canvas app that adds a few UI t
 
 Feel free to propose more features in the issue queue.
 
-- The app is a single browser module: [`extension.js`](extension.js), as Canvas loads an app from one file.
+- The app's source is in [`src/`](src), one module per feature, from [`src/index.js`](src/index.js). Canvas loads an app from one file, so `npm run build` bundles them with Rollup into [`extension.js`](extension.js), which is checked in. `npm test` builds it first, and CI checks it matches `src/`.
 - The settings and usage pages are app pages, which Canvas serves at `/extensions/agent-canvas-app-extras/settings` and `/usage`, as it has no way for an app to add a page under Customize. The app adds the settings page to Customize's menu itself, and hides its own sidebar link.
 - Canvas has no app API for settings, tab titles or page styles yet. The app works with Canvas's markup directly (its app card, chat, sidebar and title), so an OpenHands update that changes it can break a feature.
 - Settings, runs that ended while you were away, what you've read and the conversation you're looking at are kept in the browser's `localStorage`, under `openhands-extras:settings`, `:unseen`, `:read` and `:viewing`, so they're per browser rather than per backend.

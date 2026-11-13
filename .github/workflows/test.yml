@@ -15,3 +15,6 @@ jobs:
           node-version: lts/*
       - run: npm install
       - run: npm test
+      # extension.js is what Canvas installs, so it must match src/.
+      - name: Check extension.js is built from src/
+        run: git diff --exit-code extension.js
