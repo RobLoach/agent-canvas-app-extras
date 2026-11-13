@@ -15,6 +15,9 @@ An [OpenHands](https://www.openhands.dev/) Agent Canvas app that adds a few UI t
 | **Notification sounds** | Chimes when the agent needs your confirmation while you're away. |
 | **Unread markers** | Marks the conversations in the sidebar that changed since you last had them open. |
 | **Font size** | Makes Canvas's text, and the space around it, smaller or larger, from 90% to 150%, on top of your browser's own font size. |
+| **Reduce motion** | Stops Canvas's spinners, pulses, fades and slides, whatever your system's motion setting. |
+| **Clear links and focus** | Underlines every link, not only on hover, and outlines what has keyboard focus in a thick ring. |
+| **Bigger tap targets** | Makes buttons and sidebar rows at least 44 pixels tall on touch screens. |
 | **Installable app** | Lets your browser install Canvas as an app, with New chat, Conversations and Settings shortcuts and a title bar in Canvas's colours, clear of notches and home indicators. |
 | **Mobile fixes** | Keeps Canvas's dialogs within small screens, scrolling when they're taller, and stops the Automate tabs cutting off their names. |
 | **Usage page** | Adds a **Usage** page to the sidebar with what your conversations cost today, over 7 or 30 days, or all time, by model and by conversation. |

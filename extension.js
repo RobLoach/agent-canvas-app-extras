@@ -228,6 +228,27 @@ const SWITCHES = [
     default: 'default',
   },
   {
+    key: 'reduceMotion',
+    group: 'Accessibility',
+    label: 'Reduce motion',
+    description:
+      "Stop Canvas's spinners, pulses, fades and slides, whatever your system's motion setting.",
+  },
+  {
+    key: 'clearFocus',
+    group: 'Accessibility',
+    label: 'Clear links and focus',
+    description:
+      'Underline every link, not only on hover, and outline what has keyboard focus in a thick ring.',
+  },
+  {
+    key: 'largerTargets',
+    group: 'Accessibility',
+    label: 'Bigger tap targets',
+    description:
+      'Make buttons and sidebar rows at least 44 pixels tall on touch screens, so they are easier to tap.',
+  },
+  {
     key: 'installableApp',
     group: 'App',
     label: 'Installable app',
@@ -1337,6 +1358,32 @@ function fontSize() {
     dispose: () => removeElement(FONT_STYLE_ID),
   };
 }
+
+// Animations end at once rather than not at all, as some of Canvas's wait
+// for theirs to end, e.g. before closing a panel.
+const REDUCE_MOTION_CSS = `
+*, *::before, *::after {
+  animation-duration: 0.01ms !important; animation-iteration-count: 1 !important;
+  animation-delay: 0s !important; transition-duration: 0.01ms !important;
+  transition-delay: 0s !important; scroll-behavior: auto !important;
+}`;
+// Canvas underlines some links only on hover, and takes the outline off many
+// controls, or draws a faint 1px ring.
+const CLEAR_FOCUS_CSS = `
+a[href].hover\\:underline { text-decoration-line: underline; text-underline-offset: 2px; }
+:focus-visible {
+  outline: 3px solid var(--color-focus, Highlight) !important; outline-offset: 2px !important;
+}`;
+// 44px, as WCAG 2.5.5 asks, for controls; inline links in text are left as
+// they are, as min-height doesn't apply to them.
+const LARGER_TARGETS_CSS = `
+@media (pointer: coarse) {
+  button, [role="button"], a[href], select, summary { min-height: 2.75rem; }
+  button[aria-label], [role="button"][aria-label] { min-width: 2.75rem; }
+}`;
+const MOTION_STYLE_ID = 'openhands-extras-reduce-motion';
+const FOCUS_STYLE_ID = 'openhands-extras-clear-focus';
+const TARGETS_STYLE_ID = 'openhands-extras-larger-targets';
 
 // A switch that's only a style, added while it's on.
 const styleSwitch = (key, id, css) => ({
@@ -2642,6 +2689,9 @@ export function activate(host) {
     styleSwitch('wideCanvas', WIDE_STYLE_ID, WIDE_CANVAS_CSS),
     styleSwitch('mobileFixes', MOBILE_STYLE_ID, MOBILE_FIXES_CSS),
     fontSize(),
+    styleSwitch('reduceMotion', MOTION_STYLE_ID, REDUCE_MOTION_CSS),
+    styleSwitch('clearFocus', FOCUS_STYLE_ID, CLEAR_FOCUS_CSS),
+    styleSwitch('largerTargets', TARGETS_STYLE_ID, LARGER_TARGETS_CSS),
     watchResponsiveTables(),
     agentStatus,
     watchUnread(loadConversations, checks),
