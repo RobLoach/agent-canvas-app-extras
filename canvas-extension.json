@@ -2,7 +2,25 @@
   "schema_version": 1,
   "name": "agent-canvas-app-extras",
   "display_name": "Extras",
-  "version": "0.16.0",
-  "description": "Agent status in your tab and app icon, notifications, unread markers, a quieter chat and more.",
-  "entrypoint": "extension.js"
+  "version": "0.17.0",
+  "description": "Agent status in your tab and app icon, notifications, unread markers, keyboard shortcuts, a usage page, a quieter chat and more.",
+  "entrypoint": "extension.js",
+  "contributes": {
+    "pages": [
+      {
+        "id": "settings",
+        "title": "Extras",
+        "path": "/settings",
+        "nav_label": "Extras",
+        "description": "Turn Extras features on and off."
+      },
+      {
+        "id": "usage",
+        "title": "Usage",
+        "path": "/usage",
+        "nav_label": "Usage",
+        "description": "What your conversations cost, by day, model and conversation."
+      }
+    ]
+  }
 }

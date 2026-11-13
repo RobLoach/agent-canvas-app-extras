@@ -7,6 +7,11 @@ const CARDS = `
   <article id="card" data-testid="canvas-extension-card-agent-canvas-app-extras">
     <header></header><p>Description</p><footer></footer>
   </article>`;
+const SETTINGS_PATH = '/extensions/agent-canvas-app-extras/settings';
+const SETTINGS_URL = `https://canvas.test${SETTINGS_PATH}`;
+// Customize's menu, as Canvas renders it.
+const MENU =
+  '<div id="menu"><a data-testid="sidebar-extensions-/plugins" href="/plugins">Plugins</a><a data-testid="sidebar-extensions-/apps" href="/apps">Apps</a></div>';
 
 const section = (page) => page.document.getElementById('openhands-extras-settings');
 const switchFor = (page, key) =>
@@ -18,22 +23,50 @@ const hintFor = (page, key) =>
 const stored = (page) =>
   JSON.parse(page.window.localStorage.getItem('openhands-extras:settings'));
 
-test('adds the settings above its own card footer on Customize > Apps', async (t) => {
+// The app with its settings page open, as Canvas mounts it. Returns the app's
+// disposer.
+async function openSettings(page, host = fakeHost()) {
+  const dispose = await activateExtension(page, host);
+  const container = page.document.createElement('div');
+  page.document.body.append(container);
+  host.pages.get('settings')({ container, path: '', navigate: host.navigate });
+  await flush();
+  return dispose;
+}
+
+const SWITCH_KEYS = [
+  'wideCanvas',
+  'responsiveTables',
+  'quietActivity',
+  'keyboardShortcuts',
+  'tabStatus',
+  'notifications',
+  'confirmationSound',
+  'unreadMarkers',
+  'reduceMotion',
+  'clearFocus',
+  'largerTargets',
+  'installableApp',
+  'mobileFixes',
+  'usagePage',
+];
+
+test('links its card on Customize > Apps to the settings page', async (t) => {
   const page = setupPage(t, { body: CARDS });
-  const dispose = await activateExtension(page, fakeHost());
+  const host = fakeHost();
+  const dispose = await activateExtension(page, host);
 
   const card = page.document.getElementById('card');
-  assert.equal(section(page).parentElement, card);
   assert.equal(card.querySelector('footer').previousElementSibling, section(page));
   assert.equal(
     page.document.querySelector('[data-testid="canvas-extension-card-demo-page"]')
       .children.length,
     2,
   );
-  for (const key of ['wideCanvas', 'responsiveTables', 'tabStatus', 'notifications', 'confirmationSound', 'installableApp', 'quietActivity']) {
-    assert.equal(switchFor(page, key).checked, false, key);
-    assert.ok(hintFor(page, key), `${key} has a description`);
-  }
+  const link = section(page).querySelector('[data-testid="extras-open-settings"]');
+  assert.equal(link.getAttribute('href'), SETTINGS_URL);
+  link.click();
+  assert.deepEqual(host.navigations, [SETTINGS_PATH]);
 
   dispose();
   assert.equal(section(page), null);
@@ -60,9 +93,64 @@ test('moves back above the footer when Canvas inserts before it', async (t) => {
   assert.equal(page.document.querySelectorAll('#openhands-extras-settings').length, 1);
 });
 
-test('saves and applies a switch', async (t) => {
-  const page = setupPage(t, { body: CARDS });
+test("adds Extras under Apps in Customize's menu", async (t) => {
+  const page = setupPage(t, { body: MENU });
+  const host = fakeHost();
+  const dispose = await activateExtension(page, host);
+
+  const links = [...page.document.querySelectorAll('#menu > a')];
+  assert.deepEqual(links.map((link) => link.textContent), ['Plugins', 'Apps', 'Extras']);
+  links[2].click();
+  assert.deepEqual(host.navigations, [SETTINGS_PATH]);
+
+  // The compact menu renders its links when opened.
+  page.document.body.insertAdjacentHTML('beforeend', MENU.replace('id="menu"', 'id="compact"'));
+  await flush();
+  assert.equal(page.document.querySelector('#compact > a:last-child').textContent, 'Extras');
+
+  dispose();
+  assert.equal(page.document.querySelector('[data-testid="sidebar-extensions-extras"]'), null);
+});
+
+test("hides the settings page's sidebar link, and the usage page's while it's off", async (t) => {
+  const page = setupPage(t);
   await activateExtension(page, fakeHost());
+  const style = () => page.document.getElementById('openhands-extras-sidebar').textContent;
+  assert.match(style(), /agent-canvas-app-extras-settings/);
+  assert.match(style(), /agent-canvas-app-extras-usage/);
+
+  await page.changeSettings({ usagePage: true });
+  assert.doesNotMatch(style(), /agent-canvas-app-extras-usage/);
+});
+
+test('lists every switch under its group on the settings page, beside Customize', async (t) => {
+  const page = setupPage(t, { url: SETTINGS_URL });
+  const host = fakeHost();
+  await openSettings(page, host);
+
+  const headings = [...page.document.querySelectorAll('h3')].map((h) => h.textContent);
+  assert.deepEqual(headings, ['Chat', 'Status and notifications', 'Accessibility', 'App']);
+  for (const key of SWITCH_KEYS) {
+    assert.equal(switchFor(page, key).checked, false, key);
+    assert.ok(hintFor(page, key), `${key} has a description`);
+  }
+  const current = page.document.querySelector('aside [aria-current="page"]');
+  assert.equal(current.textContent, 'Extras');
+  page.document.querySelector('aside a').click();
+  assert.deepEqual(host.navigations, ['/mcp']);
+});
+
+test('redraws the switches when another tab changes the settings', async (t) => {
+  const page = setupPage(t, { url: SETTINGS_URL });
+  await openSettings(page);
+
+  await page.changeSettings({ wideCanvas: true });
+  assert.equal(switchFor(page, 'wideCanvas').checked, true);
+});
+
+test('saves and applies a switch', async (t) => {
+  const page = setupPage(t, { url: SETTINGS_URL });
+  await openSettings(page);
 
   switchFor(page, 'wideCanvas').click();
   await flush();
@@ -72,10 +160,10 @@ test('saves and applies a switch', async (t) => {
 });
 
 test('turns notifications back off when the browser denies permission', async (t) => {
-  const page = setupPage(t, { body: CARDS });
+  const page = setupPage(t, { url: SETTINGS_URL });
   page.permission = 'default';
   page.permissionAnswer = 'denied';
-  await activateExtension(page, fakeHost());
+  await openSettings(page);
 
   switchFor(page, 'notifications').click();
   await flush();
@@ -86,17 +174,17 @@ test('turns notifications back off when the browser denies permission', async (t
 });
 
 test('explains when notifications are on but permission was revoked', async (t) => {
-  const page = setupPage(t, { body: CARDS, settings: { notifications: true } });
+  const page = setupPage(t, { url: SETTINGS_URL, settings: { notifications: true } });
   page.permission = 'denied';
-  await activateExtension(page, fakeHost());
+  await openSettings(page);
 
   assert.equal(switchFor(page, 'notifications').checked, true);
   assert.match(hintFor(page, 'notifications'), /blocked/);
 });
 
 test('presents each setting as a switch, with a hint read out as it changes', async (t) => {
-  const page = setupPage(t, { body: CARDS });
-  await activateExtension(page, fakeHost());
+  const page = setupPage(t, { url: SETTINGS_URL });
+  await openSettings(page);
 
   for (const key of ['wideCanvas', 'notifications']) {
     const input = switchFor(page, key);
@@ -108,7 +196,7 @@ test('presents each setting as a switch, with a hint read out as it changes', as
 });
 
 test('ignores a switch that finishes changing after the app is disabled', async (t) => {
-  const page = setupPage(t, { body: CARDS, settings: { wideCanvas: true } });
+  const page = setupPage(t, { url: SETTINGS_URL, settings: { wideCanvas: true } });
   page.permission = 'default';
   let answer;
   page.window.Notification.requestPermission = () =>
@@ -118,7 +206,7 @@ test('ignores a switch that finishes changing after the app is disabled', async 
         resolve('granted');
       };
     });
-  const dispose = await activateExtension(page, fakeHost());
+  const dispose = await openSettings(page);
   switchFor(page, 'notifications').click();
   await flush();
 
@@ -132,10 +220,10 @@ test('ignores a switch that finishes changing after the app is disabled', async 
 
 test('resets the settings, turning every feature off', async (t) => {
   const page = setupPage(t, {
-    body: CARDS,
+    url: SETTINGS_URL,
     settings: { wideCanvas: true, tabStatus: true },
   });
-  await activateExtension(page, fakeHost());
+  await openSettings(page);
   assert.ok(page.document.getElementById('openhands-extras-wide-canvas'));
 
   page.document.querySelector('[data-testid="extras-reset-settings"]').click();
@@ -145,11 +233,10 @@ test('resets the settings, turning every feature off', async (t) => {
   assert.equal(page.document.getElementById('openhands-extras-wide-canvas'), null);
   assert.equal(switchFor(page, 'wideCanvas').checked, false);
   assert.equal(switchFor(page, 'tabStatus').checked, false);
-  assert.equal(page.document.querySelectorAll('#openhands-extras-settings').length, 1);
 });
 
 test('a reset while the permission prompt is open keeps every switch off', async (t) => {
-  const page = setupPage(t, { body: CARDS });
+  const page = setupPage(t, { url: SETTINGS_URL });
   let answer;
   page.window.Notification.requestPermission = () =>
     new Promise((resolve) => {
@@ -158,7 +245,7 @@ test('a reset while the permission prompt is open keeps every switch off', async
         resolve('granted');
       };
     });
-  await activateExtension(page, fakeHost());
+  await openSettings(page);
   switchFor(page, 'notifications').click();
   await flush();
 
@@ -171,10 +258,10 @@ test('a reset while the permission prompt is open keeps every switch off', async
 
 test('turns on the switches that merged ones moved into', async (t) => {
   const page = setupPage(t, {
-    body: CARDS,
+    url: SETTINGS_URL,
     settings: { appBadge: true, themeColor: true },
   });
-  await activateExtension(page, fakeHost());
+  await openSettings(page);
 
   assert.equal(switchFor(page, 'tabStatus').checked, true);
   assert.equal(switchFor(page, 'installableApp').checked, true);
@@ -185,4 +272,35 @@ test('turns on the switches that merged ones moved into', async (t) => {
   assert.equal(saved.tabStatus, false);
   assert.equal(saved.installableApp, true);
   assert.equal('appBadge' in saved || 'themeColor' in saved, false);
+});
+
+test('keeps redrawing after Canvas cleans up an earlier mount late', async (t) => {
+  const page = setupPage(t, { url: SETTINGS_URL });
+  const host = fakeHost();
+  await activateExtension(page, host);
+  const mount = () => {
+    const container = page.document.createElement('div');
+    page.document.body.append(container);
+    return host.pages.get('settings')({ container, path: '', navigate: host.navigate });
+  };
+  const first = mount();
+  mount();
+  first();
+
+  await page.changeSettings({ wideCanvas: true });
+  assert.equal(switchFor(page, 'wideCanvas').checked, true);
+});
+
+test('shows the keyboard shortcuts, and links back to Customize on small screens', async (t) => {
+  const page = setupPage(t, { url: SETTINGS_URL });
+  const host = fakeHost();
+  await openSettings(page, host);
+
+  page.document.querySelector('[data-testid="extras-show-shortcuts"]').click();
+  assert.ok(page.document.getElementById('openhands-extras-shortcuts'));
+
+  const back = [...page.document.querySelectorAll('a')].find((a) => a.textContent === '← Customize');
+  assert.ok(back.classList.contains('lg:hidden'));
+  back.click();
+  assert.deepEqual(host.navigations, ['/apps']);
 });
