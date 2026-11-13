@@ -4,6 +4,7 @@ import { UNREAD_ATTR } from './dom.js';
 import { away, openConversationId, sidebarConversations } from './canvas.js';
 import { READ_KEY, readJson, writeJson } from './storage.js';
 import { settings } from './settings.js';
+import { checkMs } from './checks.js';
 
 // How many conversations' read times are kept.
 const READ_LIMIT = 500;
@@ -34,9 +35,28 @@ const readState = {
 // open, with a dot after their title. Their update times come from the Agent
 // Server, checked as the page changes and at each check, except while
 // the tab is hidden, when nobody sees the sidebar: it's checked on return.
+// Each conversation's record from the Agent Server holds every LLM call's
+// cost and tokens, so all of the sidebar's are asked for at most this often,
+// and in between only the ones not known yet.
+const UNREAD_ALL_MS = 60000;
+const CARD = '[data-testid="conversation-card"]';
+// Whether a change the body observer reported was to the sidebar's cards.
+const touchesCards = (records) =>
+  records.some(
+    ({ target, addedNodes }) =>
+      !!target.closest?.(CARD) ||
+      [...addedNodes].some(
+        (node) => node.nodeType === Node.ELEMENT_NODE && (node.matches(CARD) || node.querySelector(CARD)),
+      ),
+  );
+
 export function watchUnread(loadConversations, checks) {
-  // Each sidebar conversation's last update, by key, in ms.
+  // Each sidebar conversation's last update, by key, in ms, and when they
+  // were all last asked for.
   const updated = new Map();
+  let allAt = -Infinity;
+  // The conversation open when the markers were last drawn.
+  let drawnOpen;
   // What you've read, as stored, loaded again when another window changes it.
   let state = null;
   let active = false;
@@ -47,6 +67,7 @@ export function watchUnread(loadConversations, checks) {
 
   function render() {
     const open = openKey();
+    drawnOpen = open;
     if (state && open && updated.has(open) && !(state.seen[open] >= updated.get(open))) {
       state.seen[open] = updated.get(open);
       readState.save(state);
@@ -76,7 +97,12 @@ export function watchUnread(loadConversations, checks) {
 
   async function check() {
     if (!active || document.hidden) return;
-    const keys = [...new Set(sidebarConversations().map(({ key }) => key))];
+    let keys = [...new Set(sidebarConversations().map(({ key }) => key))];
+    if (Date.now() - allAt >= Math.max(UNREAD_ALL_MS, checkMs())) {
+      allAt = Date.now();
+    } else {
+      keys = keys.filter((key) => !updated.has(key));
+    }
     if (keys.length) {
       try {
         const infos = await loadConversations(keys);
@@ -98,9 +124,12 @@ export function watchUnread(loadConversations, checks) {
     }
   }
 
+  // Coming back to the tab asks for every conversation again.
   function onVisibility() {
     render();
-    if (active && !document.hidden) checks.now();
+    if (!active || document.hidden) return;
+    allAt = -Infinity;
+    checks.now();
   }
 
   document.addEventListener('visibilitychange', onVisibility);
@@ -115,6 +144,7 @@ export function watchUnread(loadConversations, checks) {
       active = on;
       if (on) {
         state = readState.load();
+        allAt = -Infinity;
         checks.now();
         return;
       }
@@ -122,8 +152,11 @@ export function watchUnread(loadConversations, checks) {
       state = null;
       render();
     },
-    onDomChange() {
+    // Streaming in the chat doesn't change the sidebar, so only changes to
+    // its cards, or opening another conversation, redraw the markers.
+    onDomChange(records) {
       if (!active) return;
+      if (records && !touchesCards(records) && openKey() === drawnOpen) return;
       render();
       checks.request();
     },

@@ -61,7 +61,7 @@ Feel free to propose more features in the issue queue.
 - The settings page is an app page, which Canvas serves at `/extensions/agent-canvas-app-extras/settings`, as it has no way for an app to add a page under Customize. The app adds the settings page to Customize's menu itself, and hides its own sidebar link.
 - Canvas has no app API for settings, tab titles or page styles yet. The app works with Canvas's markup directly (its app card, chat, sidebar and title), so an OpenHands update that changes it can break a feature.
 - Settings, runs that ended while you were away, what you've read and the conversation you're looking at are kept in the browser's `localStorage`, under `openhands-extras:settings`, `:unseen`, `:read` and `:viewing`, so they're per browser rather than per backend.
-- While a feature that needs conversation statuses is on, the app asks the Agent Server for them, and for unread markers, in one request when the chat changes, at most once per **Check for changes every**, and that often while a run is going or for the counts and unread markers. Nothing is requested while those features are off, and unread markers rest while the tab is hidden.
+- While a feature that needs conversation statuses is on, the app asks the Agent Server for them, and for unread markers, in one request when the chat changes, at most once per **Check for changes every**, and that often while a run is going or for the counts and unread markers. Unread markers asks about every conversation in the sidebar at most once a minute, as the Agent Server sends each one's whole history of costs, and in between only about new ones. Nothing is requested while those features are off, and unread markers rest while the tab is hidden.
 
 ### Tests
 

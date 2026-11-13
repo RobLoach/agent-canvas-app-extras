@@ -36,7 +36,7 @@ test('counts everything so far as read, then marks what changes', async (t) => {
   assert.equal(JSON.parse(page.window.localStorage.getItem(READ)).since, Date.parse(EARLIER));
 
   host.updated[A] = LATER;
-  await page.check();
+  await page.wait(60_000);
   assert.deepEqual(unread(page), ['Alpha']);
   const dot = page.document.querySelector('[data-extras-unread]');
   assert.equal(dot.textContent, 'Unread', 'named for screen readers');
@@ -46,7 +46,7 @@ test('counts everything so far as read, then marks what changes', async (t) => {
 test('clears a conversation once you open it, and keeps it read as you watch', async (t) => {
   const { page, host } = await open(t);
   host.updated[A] = LATER;
-  await page.check();
+  await page.wait(60_000);
   assert.deepEqual(unread(page), ['Alpha']);
 
   page.navigate(`/conversations/${dashed(A)}`);
@@ -54,7 +54,7 @@ test('clears a conversation once you open it, and keeps it read as you watch', a
   assert.deepEqual(unread(page), []);
 
   host.updated[A] = LATEST;
-  await page.check();
+  await page.wait(60_000);
   page.navigate('/apps');
   await page.check();
   assert.deepEqual(unread(page), []);
@@ -65,7 +65,7 @@ test('marks the open conversation when it changes while you are away', async (t)
   // In another app, with Canvas still on screen.
   page.focused = false;
   host.updated[A] = LATER;
-  await page.check();
+  await page.wait(60_000);
   assert.deepEqual(unread(page), ['Alpha']);
 
   page.returnToTab();
@@ -77,7 +77,7 @@ test('shares what you have read with your other windows', async (t) => {
   const { page, host } = await open(t);
   host.updated[A] = LATER;
   host.updated[B] = LATER;
-  await page.check();
+  await page.wait(60_000);
   assert.deepEqual(unread(page), ['Alpha', 'Beta']);
 
   // Another window opened Beta.
@@ -96,7 +96,7 @@ test('asks for nothing while off, and forgets what was read when switched off', 
 
   await page.changeSettings({ unreadMarkers: true });
   host.updated[A] = LATER;
-  await page.check();
+  await page.wait(60_000);
   assert.deepEqual(unread(page), ['Alpha']);
 
   await page.changeSettings({});
@@ -104,10 +104,12 @@ test('asks for nothing while off, and forgets what was read when switched off', 
   assert.equal(page.window.localStorage.getItem(READ), null);
 });
 
-test('checks the sidebar every 10 seconds, and removes its marks when disabled', async (t) => {
+test('asks for every sidebar conversation each minute, and removes its marks when disabled', async (t) => {
   const { page, host } = await open(t);
   host.updated[B] = LATER;
   await page.wait(10_000);
+  assert.deepEqual(unread(page), [], 'not before the minute is up');
+  await page.wait(50_000);
   assert.deepEqual(unread(page), ['Beta']);
 
   page.dispose();
@@ -131,7 +133,7 @@ test('rests while the tab is hidden, and checks at once when it shows again', as
   page.hidden = true;
   const requests = host.requests.length;
   host.updated[A] = LATER;
-  await page.check();
+  await page.wait(60_000);
   await page.wait(60_000);
   assert.equal(host.requests.length, requests);
 
@@ -156,4 +158,31 @@ test('remembers only the conversations you read most recently', async (t) => {
   assert.equal(Object.keys(saved).length, 500);
   assert.ok(saved[A]);
   assert.equal(saved.old0, undefined);
+});
+
+test('between the minutes, asks only about conversations it does not know yet', async (t) => {
+  const { page, host } = await open(t);
+  const loads = () => host.requests.filter((path) => path.startsWith('/api/conversations?'));
+  const C = 'cccccccccccccccccccccccccccccccc';
+  host.updated[C] = EARLIER;
+  page.document
+    .querySelector('[data-testid="conversation-panel"]')
+    .insertAdjacentHTML('beforeend', card(C, 'Gamma'));
+  await page.check();
+
+  assert.equal(loads().at(-1), `/api/conversations?ids=${C}`);
+});
+
+test("doesn't redraw the sidebar as the chat changes", async (t) => {
+  const { page } = await open(t);
+  let searches = 0;
+  const { querySelectorAll } = page.document;
+  page.document.querySelectorAll = function (selector) {
+    if (selector.includes('conversation-card')) searches += 1;
+    return querySelectorAll.call(this, selector);
+  };
+  page.mutate();
+  await flush();
+
+  assert.equal(searches, 0);
 });
