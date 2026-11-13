@@ -315,11 +315,21 @@ function loadSettings() {
   }
 }
 
+// Stores a value as JSON, or removes it for null. Storage that's full or
+// blocked just doesn't remember it.
+function writeJson(key, value) {
+  try {
+    if (value === null) localStorage.removeItem(key);
+    else localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // Nothing to keep then.
+  }
+}
+
 // Saves the settings, or with none, removes them, turning every feature off.
 function saveSettings(next) {
   settings = next ?? DEFAULT_SETTINGS;
-  if (next) localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-  else localStorage.removeItem(STORAGE_KEY);
+  writeJson(STORAGE_KEY, next ?? null);
 }
 
 // One of our own elements in <head>, by id, created on first use with these
@@ -1639,20 +1649,9 @@ const unseenRuns = {
     if (ids.has(id) === unseen) return;
     if (unseen) ids.add(id);
     else ids.delete(id);
-    try {
-      if (ids.size) localStorage.setItem(UNSEEN_KEY, JSON.stringify([...ids]));
-      else localStorage.removeItem(UNSEEN_KEY);
-    } catch {
-      // Storage full or blocked: the badge just won't count this run.
-    }
+    writeJson(UNSEEN_KEY, ids.size ? [...ids] : null);
   },
-  clear() {
-    try {
-      localStorage.removeItem(UNSEEN_KEY);
-    } catch {
-      // Nothing to keep up to date then.
-    }
-  },
+  clear: () => writeJson(UNSEEN_KEY, null),
 };
 
 // Conversations from the Agent Server, by id, with every load asked for at
@@ -1956,12 +1955,7 @@ function watchAgentStatus(host, loadConversations, checks, onRender) {
   function shareViewing() {
     const id = !disposed && watching() && !away() ? openId : null;
     if (id === shared) return;
-    try {
-      if (id) localStorage.setItem(VIEWING_KEY, JSON.stringify(id));
-      else if (readJson(VIEWING_KEY, null) === shared) localStorage.removeItem(VIEWING_KEY);
-    } catch {
-      // Other windows may notify you about it then.
-    }
+    if (id || readJson(VIEWING_KEY, null) === shared) writeJson(VIEWING_KEY, id);
     shared = id;
   }
 
@@ -2053,19 +2047,9 @@ const readState = {
         seen.sort(([, a], [, b]) => b - a).slice(0, READ_LIMIT),
       );
     }
-    try {
-      localStorage.setItem(READ_KEY, JSON.stringify(state));
-    } catch {
-      // Storage full or blocked: what you've read won't be remembered.
-    }
+    writeJson(READ_KEY, state);
   },
-  clear() {
-    try {
-      localStorage.removeItem(READ_KEY);
-    } catch {
-      // Nothing to keep up to date then.
-    }
-  },
+  clear: () => writeJson(READ_KEY, null),
 };
 
 
