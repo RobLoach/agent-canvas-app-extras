@@ -14,6 +14,7 @@ An [OpenHands](https://www.openhands.dev/) Agent Canvas app that adds a few UI t
 | **Desktop notifications** | Notifies you when the agent finishes or needs you while you're away. |
 | **Notification sounds** | Chimes when the agent needs your confirmation while you're away. |
 | **Unread markers** | Marks the conversations in the sidebar that changed since you last had them open. |
+| **Font size** | Makes Canvas's text, and the space around it, smaller or larger, from 90% to 150%, on top of your browser's own font size. |
 | **Installable app** | Lets your browser install Canvas as an app, with New chat, Conversations and Settings shortcuts and a title bar in Canvas's colours, clear of notches and home indicators. |
 | **Mobile fixes** | Keeps Canvas's dialogs within small screens, scrolling when they're taller, and stops the Automate tabs cutting off their names. |
 | **Usage page** | Adds a **Usage** page to the sidebar with what your conversations cost today, over 7 or 30 days, or all time, by model and by conversation. |
@@ -28,7 +29,7 @@ An [OpenHands](https://www.openhands.dev/) Agent Canvas app that adds a few UI t
    ```
 4. Click **Install**
 5. **Enable** the Extras app
-6. Open **Customize > Extras**, under Apps, or **Extras settings** on the app's card, and turn on the features you want, or click **Reset settings** to turn them all off
+6. Open **Customize > Extras**, under Apps, or **Extras settings** on the app's card, and turn on the features you want, or click **Reset settings** to put them all back
 
 ## Development
 

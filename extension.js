@@ -141,12 +141,13 @@ const ACTIVE_STATUSES = new Set(['running', 'waiting_for_confirmation']);
 const ENDED_STATUSES = new Set(['finished', 'error', 'stuck']);
 const NOTIFY_STATUSES = new Set(['waiting_for_confirmation', ...ENDED_STATUSES]);
 
-// check() says why a switch can't work, e.g. after a permission was revoked;
+// A switch with options is a choice between them instead, starting at its
+// default. check() says why a switch can't work, e.g. after a permission was revoked;
 // enable(), which defaults to it, may also ask the browser for what it needs.
 // status is 'follow' for a feature that needs conversation statuses, and
 // 'count' for one that also needs how many conversations need your input.
 // The settings page lists them under their group, in this order.
-const SWITCH_GROUPS = ['Chat', 'Status and notifications', 'App'];
+const SWITCH_GROUPS = ['Chat', 'Status and notifications', 'Accessibility', 'App'];
 const SWITCHES = [
   {
     key: 'wideCanvas',
@@ -211,6 +212,22 @@ const SWITCHES = [
       'Mark the conversations in the sidebar that changed since you last had them open.',
   },
   {
+    key: 'fontSize',
+    group: 'Accessibility',
+    label: 'Font size',
+    description:
+      "Make Canvas's text, and the space around it, smaller or larger in this browser.",
+    // Choices as [value, label, the page's root font size].
+    options: [
+      ['small', 'Smaller', '90%'],
+      ['default', 'Default', null],
+      ['large', 'Larger', '112.5%'],
+      ['larger', 'Even larger', '125%'],
+      ['largest', 'Largest', '150%'],
+    ],
+    default: 'default',
+  },
+  {
     key: 'installableApp',
     group: 'App',
     label: 'Installable app',
@@ -234,7 +251,7 @@ const SWITCHES = [
   },
 ];
 const DEFAULT_SETTINGS = Object.fromEntries(
-  SWITCHES.map(({ key }) => [key, false]),
+  SWITCHES.map((item) => [item.key, item.options ? item.default : false]),
 );
 
 // Class strings mirror Canvas's ToggleSwitchVisual (src/ui/toggle-switch.tsx)
@@ -270,6 +287,12 @@ function loadSettings() {
     delete stored[old];
   }
   settings = { ...DEFAULT_SETTINGS, ...stored };
+  for (const item of SWITCHES) {
+    const value = settings[item.key];
+    if (item.options && !item.options.some(([option]) => option === value)) {
+      settings[item.key] = item.default;
+    }
+  }
 }
 
 // Saves the settings, or with none, removes them, turning every feature off.
@@ -984,6 +1007,40 @@ async function notify(host, { id, title, status, icon, isOpen, isDisposed }) {
   };
 }
 
+// A choice as a row of radio buttons, drawn as pills.
+function buildChoice(item, onChange) {
+  const block = document.createElement('fieldset');
+  block.className = 'flex min-w-0 flex-col gap-2';
+  block.innerHTML = `
+    <legend class="text-sm"></legend>
+    <div class="flex flex-wrap gap-2"></div>
+    <p id="extras-${item.key}-hint" class="text-xs leading-relaxed text-tertiary-light"></p>`;
+  block.querySelector('legend').textContent = item.label;
+  block.querySelector('p').textContent = item.description;
+  const row = block.querySelector('div');
+  const render = () => {
+    for (const label of row.children) {
+      const on = label.firstElementChild.checked;
+      label.className = `cursor-pointer rounded-full border px-3 py-1 text-sm has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-focus ${on ? 'border-contrast bg-contrast text-contrast-foreground' : 'border-border text-muted hover:text-contrast'}`;
+    }
+  };
+  for (const [value, text] of item.options) {
+    const label = document.createElement('label');
+    label.innerHTML = `<input class="sr-only" type="radio" name="extras-${item.key}" aria-describedby="extras-${item.key}-hint" data-testid="extras-${item.key}-${value}" />`;
+    const input = label.firstElementChild;
+    input.value = value;
+    input.checked = settings[item.key] === value;
+    input.addEventListener('change', () => {
+      render();
+      onChange({ ...settings, [item.key]: value });
+    });
+    label.append(text);
+    row.append(label);
+  }
+  render();
+  return block;
+}
+
 function buildSwitch(item, onChange) {
   const block = document.createElement('div');
   block.className = 'flex min-w-0 flex-col gap-1';
@@ -1190,7 +1247,7 @@ function settingsPage(host, onChange) {
       section.append(
         heading,
         ...SWITCHES.filter((item) => item.group === group).map((item) =>
-          buildSwitch(item, onChange),
+          (item.options ? buildChoice : buildSwitch)(item, onChange),
         ),
       );
       if (group === 'Chat') {
@@ -1263,6 +1320,21 @@ function settingsPage(host, onChange) {
     onStorage(key) {
       if (key === STORAGE_KEY) render();
     },
+  };
+}
+
+// The page's root font size, which Canvas's rem-based sizes follow, from the
+// browser's own, so a size set there still counts.
+const FONT_STYLE_ID = 'openhands-extras-font-size';
+function fontSize() {
+  const item = SWITCHES.find(({ key }) => key === 'fontSize');
+  return {
+    refresh() {
+      const size = item.options.find(([value]) => value === settings.fontSize)?.[2];
+      if (size) setStyle(FONT_STYLE_ID, `html { font-size: ${size}; }`);
+      else removeElement(FONT_STYLE_ID);
+    },
+    dispose: () => removeElement(FONT_STYLE_ID),
   };
 }
 
@@ -2569,6 +2641,7 @@ export function activate(host) {
     settingsView,
     styleSwitch('wideCanvas', WIDE_STYLE_ID, WIDE_CANVAS_CSS),
     styleSwitch('mobileFixes', MOBILE_STYLE_ID, MOBILE_FIXES_CSS),
+    fontSize(),
     watchResponsiveTables(),
     agentStatus,
     watchUnread(loadConversations, checks),
