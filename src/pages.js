@@ -212,35 +212,54 @@ export function watchCustomizeMenu(host) {
 
 // The settings page: Customize's menu, as Canvas draws it on its own pages,
 // beside the switches under their groups. Its reset button passes no
-// settings, turning every switch off. Settings changed in another tab redraw
-// the switches.
+// settings, putting every switch back, and offers to undo that. Settings
+// changed in another tab redraw the switches.
 export function settingsPage(host, onChange) {
   let list = null;
+  let showShortcutsButton = null;
+  // The settings before Reset, until you undo it or change one.
+  let beforeReset = null;
+  const change = (next) => {
+    beforeReset = null;
+    onChange(next);
+  };
 
   function render() {
     if (!list) return;
+    showShortcutsButton = textButton('extras-show-shortcuts', 'Show keyboard shortcuts', () =>
+      showShortcuts?.(),
+    );
+    showShortcutsButton.hidden = !settings.keyboardShortcuts;
     const groups = SWITCH_GROUPS.map((group) =>
       pageSection(
         group,
         ...SWITCHES.filter((item) => item.group === group).map((item) =>
-          (item.options ? buildChoice : buildSwitch)(item, onChange),
+          (item.options ? buildChoice : buildSwitch)(item, change),
         ),
-        ...(group === 'Chat'
-          ? [
-              textButton(
-                'extras-show-shortcuts',
-                'Show keyboard shortcuts',
-                () => showShortcuts?.(),
-                'text-link hover:underline',
-              ),
-            ]
-          : []),
+        ...(group === 'Chat' ? [showShortcutsButton] : []),
       ),
     );
-    const reset = textButton('extras-reset-settings', 'Reset settings', () => {
-      onChange(null);
-      render();
-    });
+    const reset = el(
+      'div',
+      'flex flex-wrap items-center gap-3',
+      textButton('extras-reset-settings', 'Reset settings', () => {
+        const before = settings;
+        change(null);
+        beforeReset = before;
+        render();
+      }),
+    );
+    if (beforeReset) {
+      const status = el('span', 'text-sm text-tertiary-light', 'Every setting is back to its default.');
+      status.setAttribute('role', 'status');
+      reset.append(
+        status,
+        textButton('extras-undo-reset', 'Undo', () => {
+          change(beforeReset);
+          render();
+        }),
+      );
+    }
     list.replaceChildren(...groups, reset);
   }
 
@@ -286,6 +305,10 @@ export function settingsPage(host, onChange) {
 
   return {
     mount,
+    // Show keyboard shortcuts only shows while they're on.
+    refresh() {
+      if (showShortcutsButton) showShortcutsButton.hidden = !settings.keyboardShortcuts;
+    },
     onStorage(key) {
       if (key === STORAGE_KEY) render();
     },

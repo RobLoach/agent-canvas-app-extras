@@ -15,7 +15,7 @@ import {
 // status is 'follow' for a feature that needs conversation statuses, and
 // 'count' for one that also needs how many conversations need your input.
 // The settings page lists them under their group, in this order.
-export const SWITCH_GROUPS = ['Chat', 'Status and notifications', 'Accessibility', 'App'];
+export const SWITCH_GROUPS = ['Chat', 'Notifications', 'Accessibility', 'Phone and app', 'Pages'];
 export const SWITCHES = [
   {
     key: 'wideChat',
@@ -27,71 +27,62 @@ export const SWITCHES = [
     key: 'focusedNewChat',
     group: 'Chat',
     label: 'Focused new chat',
-    description:
-      'Hide the new chat page\'s "What do you want to work on?" heading and tagline, and put the message box at the top.',
-  },
-  {
-    key: 'responsiveTables',
-    group: 'Chat',
-    label: 'Responsive tables',
-    description:
-      "Stack a table's cells under their headings while it's too wide for the chat.",
+    description: "Hide the new chat page's heading, and put the message box at the top.",
   },
   {
     key: 'collapseActivity',
     group: 'Chat',
     status: 'follow',
     label: 'Collapse agent activity',
-    description:
-      'Fold the agent\'s "Running" and "Reading" entries in the chat into "Thinking", which expands to show them.',
+    description: 'Fold the agent\'s "Running" and "Reading" entries into an expandable "Thinking".',
+  },
+  {
+    key: 'responsiveTables',
+    group: 'Chat',
+    label: 'Responsive tables',
+    description: "Stack a table's cells under their headings when it's too wide for the chat.",
   },
   {
     key: 'keyboardShortcuts',
     group: 'Chat',
     label: 'Keyboard shortcuts',
-    description:
-      'Press ? to list them: / focuses the message box, Alt+↑ and Alt+↓ open the previous or next conversation and Alt+Shift+↓ the next one that needs you, even from the message box, and Alt+N starts a new chat.',
+    description: 'Switch conversations and start chats from the keyboard. Press ? to list them.',
   },
   {
     key: 'tabStatus',
-    group: 'Status and notifications',
+    group: 'Notifications',
     status: 'count',
     label: 'Tab status',
-    description:
-      "Show the agent's status in the browser tab's title and icon, and how many conversations need your input on the installed app's icon.",
+    description: "Show the agent's status in the tab, and what needs you on the app's icon.",
   },
   {
     key: 'notifications',
-    group: 'Status and notifications',
+    group: 'Notifications',
     status: 'follow',
     label: 'Desktop notifications',
-    description:
-      'Notify you when the agent finishes or needs you while this tab is in the background.',
+    description: "Notify you when the agent finishes or needs you while you're away.",
     check: notificationProblem,
     enable: requestNotificationPermission,
   },
   {
     key: 'notificationSounds',
-    group: 'Status and notifications',
+    group: 'Notifications',
     status: 'follow',
     label: 'Notification sounds',
-    description:
-      'Play a chime when the agent needs your confirmation while this tab is in the background.',
+    description: "Chime when the agent needs your confirmation while you're away.",
     enable: unlockAudio,
   },
   {
     key: 'unreadMarkers',
-    group: 'Status and notifications',
+    group: 'Notifications',
     label: 'Unread markers',
-    description:
-      'Mark the conversations in the sidebar that changed since you last had them open.',
+    description: 'Mark the conversations in the sidebar that changed since you last opened them.',
   },
   {
     key: 'fontSize',
     group: 'Accessibility',
     label: 'Font size',
-    description:
-      "Make Canvas's text, and the space around it, smaller or larger in this browser.",
+    description: "Make Canvas's text, and the space around it, smaller or larger.",
     // Choices as [value, label, the page's root font size].
     options: [
       ['smallest', 'Smallest', '75%'],
@@ -108,44 +99,38 @@ export const SWITCHES = [
     key: 'reduceMotion',
     group: 'Accessibility',
     label: 'Reduce motion',
-    description:
-      "Stop Canvas's spinners, pulses, fades and slides, whatever your system's motion setting.",
+    description: "Stop Canvas's spinners, pulses, fades and slides.",
   },
   {
     key: 'clearFocus',
     group: 'Accessibility',
     label: 'Clear links and focus',
-    description:
-      'Underline every link, not only on hover, and outline what has keyboard focus in a thick ring.',
+    description: 'Underline every link, and ring what has keyboard focus.',
   },
   {
     key: 'biggerTapTargets',
     group: 'Accessibility',
     label: 'Bigger tap targets',
-    description:
-      'Make buttons and sidebar rows at least 44 pixels tall on touch screens, so they are easier to tap.',
+    description: 'Make buttons and sidebar rows at least 44 pixels tall on touch screens.',
   },
   {
     key: 'installableApp',
-    group: 'App',
+    group: 'Phone and app',
     label: 'Installable app',
-    description:
-      "Let your browser install Canvas as an app, with New chat and Settings shortcuts and a title bar in Canvas's colours, clear of notches and home indicators.",
+    description: "Let your browser install Canvas as an app, with shortcuts and a title bar in its colours.",
     check: installProblem,
   },
   {
     key: 'mobileFixes',
-    group: 'App',
+    group: 'Phone and app',
     label: 'Mobile fixes',
-    description:
-      "On phones and tablets: keep the message box above the browser's toolbar, open the sidebar across the whole screen, show buttons that otherwise only appear on hover, keep dialogs on screen, and stop the Automate tabs cutting off their names.",
+    description: "Fit Canvas's sidebar, dialogs, buttons and message box to phones and tablets.",
   },
   {
     key: 'usagePage',
-    group: 'App',
+    group: 'Pages',
     label: 'Usage page',
-    description:
-      'Add a Usage page to the sidebar, with what your conversations cost over a period, by model and by conversation.',
+    description: 'Add a Usage page to the sidebar, with what your conversations cost.',
   },
 ];
 const DEFAULT_SETTINGS = Object.fromEntries(

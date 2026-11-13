@@ -96,7 +96,7 @@ test('lists every switch under its group on the settings page, beside Customize'
   await openSettings(page, host);
 
   const headings = [...page.document.querySelectorAll('h3')].map((h) => h.textContent);
-  assert.deepEqual(headings, ['Chat', 'Status and notifications', 'Accessibility', 'App']);
+  assert.deepEqual(headings, ['Chat', 'Notifications', 'Accessibility', 'Phone and app', 'Pages']);
   for (const key of SWITCH_KEYS) {
     assert.equal(switchFor(page, key).checked, false, key);
     assert.ok(hintFor(page, key), `${key} has a description`);
@@ -261,4 +261,32 @@ test("keeps each switch's hidden checkbox inside its label, so focusing it doesn
   for (const key of SWITCH_KEYS) {
     assert.ok(switchFor(page, key).closest('label').classList.contains('relative'), key);
   }
+});
+
+test('offers to undo Reset settings', async (t) => {
+  const page = setupPage(t, { url: SETTINGS_URL, settings: { wideChat: true, fontSize: 'large' } });
+  await openSettings(page);
+  page.document.querySelector('[data-testid="extras-reset-settings"]').click();
+  await flush();
+  assert.equal(stored(page), null);
+  assert.match(page.document.querySelector('[role="status"]').textContent, /back to its default/);
+
+  page.document.querySelector('[data-testid="extras-undo-reset"]').click();
+  await flush();
+  assert.deepEqual(
+    [stored(page).wideChat, stored(page).fontSize, switchFor(page, 'wideChat').checked],
+    [true, 'large', true],
+  );
+  assert.equal(page.document.querySelector('[data-testid="extras-undo-reset"]'), null);
+});
+
+test('shows Show keyboard shortcuts only while they are on', async (t) => {
+  const page = setupPage(t, { url: SETTINGS_URL });
+  await openSettings(page);
+  const button = () => page.document.querySelector('[data-testid="extras-show-shortcuts"]');
+  assert.equal(button().hidden, true);
+
+  switchFor(page, 'keyboardShortcuts').click();
+  await flush();
+  assert.equal(button().hidden, false);
 });
