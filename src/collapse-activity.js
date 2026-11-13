@@ -16,14 +16,14 @@ import {
 } from './canvas.js';
 import { settings } from './settings.js';
 
-const QUIET_STYLE_ID = 'openhands-extras-quiet-activity';
-const QUIET_ATTR = 'data-extras-quiet';
+const COLLAPSE_STYLE_ID = 'openhands-extras-collapse-activity';
+const FOLDED_ATTR = 'data-extras-folded';
 const SHOWN_ATTR = 'data-extras-shown';
 const EVENT_TITLE = '[data-testid="generic-event-message-title"]';
 
 // Canvas's titles for commands and file reads, before and after, in English
 // until its translations for the page's language load.
-const QUIET_LABELS = {
+const FOLD_LABELS = {
   ACTION_MESSAGE$RUN: 'Running <cmd>{{command}}</cmd>',
   ACTION_MESSAGE$RUN_IPYTHON: 'Running a Python command',
   ACTION_MESSAGE$READ: 'Reading <path>{{path}}</path>',
@@ -58,30 +58,30 @@ function labelPattern(labels) {
 // Canvas's titles to fold, as a pattern, and its "Thinking", by language:
 // English until Canvas's translations for the language arrive, when onLoad
 // runs so they can be used.
-const ENGLISH_QUIET_LABELS = {
-  title: labelPattern(Object.values(QUIET_LABELS)),
+const ENGLISH_FOLD_LABELS = {
+  title: labelPattern(Object.values(FOLD_LABELS)),
   thinking: 'Thinking',
 };
-const quietLabelsByLanguage = new Map();
+const foldLabelsByLanguage = new Map();
 
-function quietLabels(language, onLoad) {
-  if (!quietLabelsByLanguage.has(language)) {
-    quietLabelsByLanguage.set(language, ENGLISH_QUIET_LABELS);
+function foldLabels(language, onLoad) {
+  if (!foldLabelsByLanguage.has(language)) {
+    foldLabelsByLanguage.set(language, ENGLISH_FOLD_LABELS);
     if (language !== 'en') {
       canvasTranslations(language).then((translated) => {
-        quietLabelsByLanguage.set(language, {
+        foldLabelsByLanguage.set(language, {
           title: labelPattern(
-            Object.entries(QUIET_LABELS).map(
+            Object.entries(FOLD_LABELS).map(
               ([key, label]) => translated[key] ?? label,
             ),
           ),
-          thinking: translated[THINKING_KEY] ?? ENGLISH_QUIET_LABELS.thinking,
+          thinking: translated[THINKING_KEY] ?? ENGLISH_FOLD_LABELS.thinking,
         });
         onLoad();
       });
     }
   }
-  return quietLabelsByLanguage.get(language);
+  return foldLabelsByLanguage.get(language);
 }
 
 // Canvas's own "Thinking" entry, with its chevron and lightbulb, as a toggle
@@ -115,11 +115,11 @@ const expanded = (thinking) =>
 // to show. Timed out commands, the only failures Canvas marks, stay visible.
 // The last stretch pulses while the open conversation is running. The body
 // observer only watches child lists, so marking doesn't re-trigger it.
-export function watchQuietActivity(statusOf) {
+export function watchCollapseActivity(statusOf) {
   let active = false;
   let disposed = false;
   // Canvas's titles to fold and its "Thinking", in its current language.
-  let labels = ENGLISH_QUIET_LABELS;
+  let labels = ENGLISH_FOLD_LABELS;
   // Each stretch's toggle, by the stretch's first chat item.
   let toggles = new WeakMap();
   // Whether the last stretch pulses, for the open conversation running.
@@ -129,7 +129,7 @@ export function watchQuietActivity(statusOf) {
   // change once Canvas renders it.
   let chat = null;
   let chip = null;
-  let quietRows = new WeakMap();
+  let foldRows = new WeakMap();
   // Each chat item as last read, read again only once it changes, so a
   // streaming run doesn't rescan the whole chat on every update.
   let readItems = new WeakMap();
@@ -142,9 +142,9 @@ export function watchQuietActivity(statusOf) {
 
   function reveal() {
     for (const element of document.querySelectorAll(
-      `[${QUIET_ATTR}], [${SHOWN_ATTR}]`,
+      `[${FOLDED_ATTR}], [${SHOWN_ATTR}]`,
     )) {
-      element.removeAttribute(QUIET_ATTR);
+      element.removeAttribute(FOLDED_ATTR);
       element.removeAttribute(SHOWN_ATTR);
     }
     for (const ours of document.querySelectorAll(
@@ -152,38 +152,38 @@ export function watchQuietActivity(statusOf) {
     )) {
       ours.remove();
     }
-    removeElement(QUIET_STYLE_ID);
+    removeElement(COLLAPSE_STYLE_ID);
     toggles = new WeakMap();
-    quietRows = new WeakMap();
+    foldRows = new WeakMap();
     readItems = new WeakMap();
   }
 
-  // Each chat item's event rows, the quiet ones among them, and whether
+  // Each chat item's event rows, the foldable ones among them, and whether
   // they're all it shows.
   function readItem(item) {
     const rows = [];
-    const quiet = [];
+    const foldable = [];
     for (const title of item.querySelectorAll(EVENT_TITLE)) {
       // Only a row inside the item: were Canvas to drop a wrapper, this would
       // otherwise hide the item, or the whole chat.
       const row = title.parentElement?.parentElement;
       if (!row || row === item || !item.contains(row)) continue;
       rows.push(row);
-      let known = quietRows.get(row);
+      let known = foldRows.get(row);
       if (known?.labels !== labels) {
-        known = { labels, quiet: labels.title.test(title.textContent.trim()) };
-        quietRows.set(row, known);
+        known = { labels, foldable: labels.title.test(title.textContent.trim()) };
+        foldRows.set(row, known);
       }
-      if (known.quiet && !row.querySelector('[data-testid="status-icon"]')) {
-        quiet.push(row);
+      if (known.foldable && !row.querySelector('[data-testid="status-icon"]')) {
+        foldable.push(row);
       }
     }
     const children = [...item.children].filter(
       (child) => !child.hasAttribute(THINKING_ATTR),
     );
     const whole =
-      children.length > 0 && children.every((child) => quiet.includes(child));
-    return { item, rows, quiet, whole, labels };
+      children.length > 0 && children.every((child) => foldable.includes(child));
+    return { item, rows, foldable, whole, labels };
   }
 
   function itemEntry(item) {
@@ -205,15 +205,15 @@ export function watchQuietActivity(statusOf) {
     }
   }
 
-  // Runs of items with quiet rows: a stretch starts at any item with some,
+  // Runs of items with foldable rows: a stretch starts at any item with some,
   // and carries on through items with nothing else.
   function stretches(items) {
     const found = [];
     let current = null;
     for (const entry of items) {
-      if (!entry.quiet.length || !entry.whole) {
+      if (!entry.foldable.length || !entry.whole) {
         if (current) found.push(current);
-        current = entry.quiet.length ? [entry] : null;
+        current = entry.foldable.length ? [entry] : null;
       } else {
         (current ??= []).push(entry);
       }
@@ -229,9 +229,9 @@ export function watchQuietActivity(statusOf) {
     if (!chip) return;
     let ours = chip.querySelector(`:scope > [${CHIP_LABEL_ATTR}]`);
     const label = [...chip.children].findLast((child) => child !== ours);
-    const quiet = !!label && labels.title.test(label.textContent.trim());
-    if (label) toggleAttr(label, QUIET_ATTR, quiet);
-    if (!quiet) {
+    const foldable = !!label && labels.title.test(label.textContent.trim());
+    if (label) toggleAttr(label, FOLDED_ATTR, foldable);
+    if (!foldable) {
       ours?.remove();
       return;
     }
@@ -246,16 +246,16 @@ export function watchQuietActivity(statusOf) {
 
   function apply() {
     if (disposed) return;
-    if (!settings.quietActivity) {
+    if (!settings.collapseActivity) {
       if (active) reveal();
       active = false;
       return;
     }
     active = true;
-    labels = quietLabels(canvasLanguage(), apply);
+    labels = foldLabels(canvasLanguage(), apply);
     setStyle(
-      QUIET_STYLE_ID,
-      `[${QUIET_ATTR}]:not([${SHOWN_ATTR}]) { display: none !important; }`,
+      COLLAPSE_STYLE_ID,
+      `[${FOLDED_ATTR}]:not([${SHOWN_ATTR}]) { display: none !important; }`,
     );
     relabelChip();
     chat = find(chat, '[data-testid="chat-scroll-container"]');
@@ -276,7 +276,7 @@ export function watchQuietActivity(statusOf) {
       used.add(thinking);
       const open = expanded(thinking);
       for (const entry of stretch) {
-        const nodes = entry.whole && entry !== last ? [entry.item] : entry.quiet;
+        const nodes = entry.whole && entry !== last ? [entry.item] : entry.foldable;
         for (const node of nodes) hidden.set(node, open);
       }
       thinking.querySelector('svg').classList.toggle('rotate-180', open);
@@ -289,7 +289,7 @@ export function watchQuietActivity(statusOf) {
     }
     for (const { item, rows } of items) {
       for (const node of [item, ...rows]) {
-        toggleAttr(node, QUIET_ATTR, hidden.has(node));
+        toggleAttr(node, FOLDED_ATTR, hidden.has(node));
         toggleAttr(node, SHOWN_ATTR, hidden.get(node) === true);
       }
     }

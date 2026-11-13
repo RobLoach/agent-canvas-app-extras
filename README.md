@@ -4,22 +4,45 @@ An [OpenHands](https://www.openhands.dev/) Agent Canvas app that adds a few UI t
 
 ## Features
 
+### Chat
+
 | Name | What it does |
 | :-- | :-- |
-| **Wide canvas** | Lets the chat use the full width of the canvas. |
-| **Responsive tables** | Stacks a table's rows when it's too wide for the chat. |
+| **Wide chat** | Lets the chat use the full width of the page. |
+| **Focused new chat** | Hides the new chat page's "What do you want to work on?" heading and tagline, and puts the message box at the top. |
 | **Collapse agent activity** | Folds "Running" and "Reading" chat entries into expandable "Thinking" entries. |
+| **Responsive tables** | Stacks a table's rows when it's too wide for the chat. |
 | **Keyboard shortcuts** | <kbd>?</kbd> lists them, <kbd>/</kbd> focuses the message box, <kbd>Alt</kbd>+<kbd>↑</kbd>/<kbd>↓</kbd> open the previous or next conversation and <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>↓</kbd> the next one waiting for your confirmation or unread, even from the message box, and <kbd>Alt</kbd>+<kbd>N</kbd> starts a new chat. Canvas's own <kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>K</kbd> menu covers the rest. |
+
+### Notifications
+
+| Name | What it does |
+| :-- | :-- |
 | **Tab status** | Shows the agent's status in the tab's title and icon, and counts the conversations that need your input on the installed app's icon. |
 | **Desktop notifications** | Notifies you when the agent finishes or needs you while you're away. |
 | **Notification sounds** | Chimes when the agent needs your confirmation while you're away. |
 | **Unread markers** | Marks the conversations in the sidebar that changed since you last had them open. |
-| **Font size** | Makes Canvas's text, and the space around it, smaller or larger, from 90% to 150%, on top of your browser's own font size. |
+
+### Accessibility
+
+| Name | What it does |
+| :-- | :-- |
+| **Font size** | Makes Canvas's text, and the space around it, smaller or larger, from 75% to 150%, on top of your browser's own font size. |
 | **Reduce motion** | Stops Canvas's spinners, pulses, fades and slides, whatever your system's motion setting. |
 | **Clear links and focus** | Underlines every link, not only on hover, and outlines what has keyboard focus in a thick ring. |
 | **Bigger tap targets** | Makes buttons and sidebar rows at least 44 pixels tall on touch screens. |
+
+### Phone and app
+
+| Name | What it does |
+| :-- | :-- |
 | **Installable app** | Lets your browser install Canvas as an app, with New chat and Settings shortcuts and a title bar in Canvas's colours, clear of notches and home indicators. |
 | **Mobile fixes** | On phones and tablets, keeps the message box above the browser's toolbar, opens the sidebar across the whole screen without conversation previews running off it, shows buttons that otherwise only appear on hover, keeps Canvas's dialogs on screen, scrolling when they're taller, and stops the Automate tabs cutting off their names. |
+
+### Pages
+
+| Name | What it does |
+| :-- | :-- |
 | **Usage page** | Adds a **Usage** page to the sidebar with what your conversations cost today, over 7 or 30 days, or all time, by model and by conversation. |
 
 ## Install

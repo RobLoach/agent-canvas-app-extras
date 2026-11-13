@@ -7,7 +7,6 @@ import {
   OWN_ATTR,
   pageHeader,
   pageSection,
-  pillClass,
   removeElement,
   setStyle,
   textButton,
@@ -30,39 +29,40 @@ const THUMB_CLASS =
 const THUMB_ON_CLASS = 'translate-x-5.25 rtl:-translate-x-5.25 bg-base-secondary';
 const THUMB_OFF_CLASS = 'translate-x-0.5 rtl:-translate-x-0.5 bg-muted';
 
-// A choice as a row of radio buttons, drawn as pills.
+// Canvas's formControlFieldClassName (form-control-classes.ts), as its
+// settings fields look.
+const SELECT_CLASS =
+  'h-9 min-h-9 rounded-lg border border-control bg-base-secondary transition-control-shell duration-75 motion-reduce:transition-none focus:border-contrast/40 dark:focus:border-contrast/40 focus:ring-1 focus:ring-contrast/20 focus:outline-none w-full max-w-xs min-w-0 px-3 text-sm text-contrast cursor-pointer';
+
+// A choice as a dropdown under its label.
 function buildChoice(item, onChange) {
-  const row = el('div', 'flex flex-wrap gap-2');
+  const id = `extras-${item.key}`;
+  const select = el(
+    'select',
+    SELECT_CLASS,
+    ...item.options.map(([value, text]) => {
+      const option = el('option', '', text);
+      option.value = value;
+      return option;
+    }),
+  );
+  select.id = id;
+  select.dataset.testid = `${id}-select`;
+  select.value = settings[item.key];
+  select.setAttribute('aria-describedby', `${id}-hint`);
+  select.addEventListener('change', () => onChange({ ...settings, [item.key]: select.value }));
+  const label = el('label', 'w-fit text-sm', item.label);
+  label.htmlFor = id;
   const hint = el('p', 'text-xs leading-relaxed text-tertiary-light', item.description);
-  hint.id = `extras-${item.key}-hint`;
-  const block = el('fieldset', 'flex min-w-0 flex-col gap-2', el('legend', 'text-sm', item.label), row, hint);
-  const render = () => {
-    for (const label of row.children) {
-      label.className = pillClass(label.firstElementChild.checked, HAS_FOCUS_RING);
-    }
-  };
-  for (const [value, text] of item.options) {
-    const label = document.createElement('label');
-    label.innerHTML = `<input class="sr-only" type="radio" name="extras-${item.key}" aria-describedby="extras-${item.key}-hint" data-testid="extras-${item.key}-${value}" />`;
-    const input = label.firstElementChild;
-    input.value = value;
-    input.checked = settings[item.key] === value;
-    input.addEventListener('change', () => {
-      render();
-      onChange({ ...settings, [item.key]: value });
-    });
-    label.append(text);
-    row.append(label);
-  }
-  render();
-  return block;
+  hint.id = `${id}-hint`;
+  return el('div', 'flex min-w-0 flex-col gap-2', label, select, hint);
 }
 
 function buildSwitch(item, onChange) {
   const block = document.createElement('div');
   block.className = 'flex min-w-0 flex-col gap-1';
   block.innerHTML = `
-    <label class="flex items-center gap-2 rounded-sm ${HAS_FOCUS_RING} w-fit cursor-pointer">
+    <label class="relative flex items-center gap-2 rounded-sm ${HAS_FOCUS_RING} w-fit cursor-pointer">
       <input class="sr-only" type="checkbox" role="switch" data-testid="extras-${item.key}-switch" aria-describedby="extras-${item.key}-hint" />
       <span aria-hidden="true"><span></span></span>
       <span class="flex items-center gap-1">
@@ -212,35 +212,54 @@ export function watchCustomizeMenu(host) {
 
 // The settings page: Customize's menu, as Canvas draws it on its own pages,
 // beside the switches under their groups. Its reset button passes no
-// settings, turning every switch off. Settings changed in another tab redraw
-// the switches.
+// settings, putting every switch back, and offers to undo that. Settings
+// changed in another tab redraw the switches.
 export function settingsPage(host, onChange) {
   let list = null;
+  let showShortcutsButton = null;
+  // The settings before Reset, until you undo it or change one.
+  let beforeReset = null;
+  const change = (next) => {
+    beforeReset = null;
+    onChange(next);
+  };
 
   function render() {
     if (!list) return;
+    showShortcutsButton = textButton('extras-show-shortcuts', 'Show keyboard shortcuts', () =>
+      showShortcuts?.(),
+    );
+    showShortcutsButton.hidden = !settings.keyboardShortcuts;
     const groups = SWITCH_GROUPS.map((group) =>
       pageSection(
         group,
         ...SWITCHES.filter((item) => item.group === group).map((item) =>
-          (item.options ? buildChoice : buildSwitch)(item, onChange),
+          (item.options ? buildChoice : buildSwitch)(item, change),
         ),
-        ...(group === 'Chat'
-          ? [
-              textButton(
-                'extras-show-shortcuts',
-                'Show keyboard shortcuts',
-                () => showShortcuts?.(),
-                'text-link hover:underline',
-              ),
-            ]
-          : []),
+        ...(group === 'Chat' ? [showShortcutsButton] : []),
       ),
     );
-    const reset = textButton('extras-reset-settings', 'Reset settings', () => {
-      onChange(null);
-      render();
-    });
+    const reset = el(
+      'div',
+      'flex flex-wrap items-center gap-3',
+      textButton('extras-reset-settings', 'Reset settings', () => {
+        const before = settings;
+        change(null);
+        beforeReset = before;
+        render();
+      }),
+    );
+    if (beforeReset) {
+      const status = el('span', 'text-sm text-tertiary-light', 'Every setting is back to its default.');
+      status.setAttribute('role', 'status');
+      reset.append(
+        status,
+        textButton('extras-undo-reset', 'Undo', () => {
+          change(beforeReset);
+          render();
+        }),
+      );
+    }
     list.replaceChildren(...groups, reset);
   }
 
@@ -286,6 +305,10 @@ export function settingsPage(host, onChange) {
 
   return {
     mount,
+    // Show keyboard shortcuts only shows while they're on.
+    refresh() {
+      if (showShortcutsButton) showShortcutsButton.hidden = !settings.keyboardShortcuts;
+    },
     onStorage(key) {
       if (key === STORAGE_KEY) render();
     },

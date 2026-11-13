@@ -270,7 +270,7 @@ export function watchAgentStatus(host, loadConversations, checks, onRender) {
         isDisposed: () => disposed,
       }).catch(() => {});
     }
-    if (settings.confirmationSound && next === WAITING) {
+    if (settings.notificationSounds && next === WAITING) {
       chime(id).catch(() => {});
     }
     return waitingChanged;

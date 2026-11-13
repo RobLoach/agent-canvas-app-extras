@@ -7,8 +7,15 @@ import { settings, SWITCHES } from './settings.js';
 // The chat thread is the only max-w-200 element that is also h-full, so the
 // Customize, Settings and home launcher columns keep their width. Unlayered
 // CSS beats Tailwind's @layer utilities regardless of specificity.
-export const WIDE_CANVAS_CSS =
+export const WIDE_CHAT_CSS =
   '[data-agent-server-ui] .max-w-200.h-full.min-h-0 { max-width: none; }';
+
+// The new chat page (HomeChatLauncher) puts its heading and tagline
+// (HomeHeaderTitle) above the message box, and starts 28% of the way down
+// the page, or further while a new chat starts.
+export const FOCUSED_NEW_CHAT_CSS = `
+[data-testid="home-chat-launcher"] div:has(> div > [data-testid="home-header-subtitle"]) { display: none; }
+[data-testid="home-chat-launcher"]:not(.h-full) { padding-top: 2rem; }`;
 
 // Canvas's dialogs (ModalBackdrop: a fixed backdrop, then the content)
 // centre fixed-width content with no height limit, so on a phone a tall or
@@ -79,7 +86,7 @@ a[href].hover\\:underline { text-decoration-line: underline; text-underline-offs
 
 // 44px, as WCAG 2.5.5 asks, for controls; inline links in text are left as
 // they are, as min-height doesn't apply to them.
-export const LARGER_TARGETS_CSS = `
+export const BIGGER_TAP_TARGETS_CSS = `
 @media (pointer: coarse) {
   button, [role="button"], a[href], select, summary { min-height: 2.75rem; }
   button[aria-label], [role="button"][aria-label] { min-width: 2.75rem; }

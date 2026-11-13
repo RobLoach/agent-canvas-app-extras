@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { activateExtension, fakeHost, flush, setupPage } from './helpers.js';
+import { activateExtension, fakeHost, flush, setupPage, start } from './helpers.js';
 
 const HEAD = '<meta name="viewport" content="width=device-width, initial-scale=1">';
 const BODY =
@@ -21,8 +21,7 @@ const meta = (page, name) =>
 const safeArea = (page) => page.document.getElementById('openhands-extras-safe-area');
 
 test('Installable app is off by default', async (t) => {
-  const page = setupPage(t, { head: HEAD, body: BODY });
-  await activateExtension(page, fakeHost());
+  const { page } = await start(t, { head: HEAD, body: BODY });
 
   assert.equal(link(page), null);
   assert.equal(viewport(page), 'width=device-width, initial-scale=1');
@@ -81,8 +80,7 @@ test('adds the manifest link with its rel, as Chromium needs', async (t) => {
 });
 
 test('follows the theme in the manifest colours', async (t) => {
-  const page = setupPage(t, { head: HEAD, body: BODY, settings: ON });
-  await activateExtension(page, fakeHost());
+  const { page } = await start(t, { head: HEAD, body: BODY, settings: ON });
 
   page.document.querySelector('[data-color-theme]').style.backgroundColor =
     'rgb(250, 250, 250)';
@@ -103,12 +101,11 @@ test("uses Canvas's base path", async (t) => {
 });
 
 test('stands down when Canvas links a manifest itself', async (t) => {
-  const page = setupPage(t, {
+  const { page } = await start(t, {
     head: `${HEAD}<link rel="manifest" href="/site.webmanifest">`,
     body: BODY,
     settings: ON,
   });
-  await activateExtension(page, fakeHost());
 
   assert.equal(link(page), null);
   assert.equal(safeArea(page), null);
@@ -220,8 +217,7 @@ test('matches the theme-color to Canvas and follows theme changes', async (t) =>
 });
 
 test('follows a re-mounted theme root', async (t) => {
-  const page = setupPage(t, { body: THEME_BODY, settings: { installableApp: true } });
-  await activateExtension(page, fakeHost());
+  const { page } = await start(t, { body: THEME_BODY, settings: { installableApp: true } });
 
   page.document.body.innerHTML =
     '<div data-agent-server-ui style="background-color: rgb(1, 2, 3)"></div>';
@@ -242,8 +238,7 @@ test('leaves the theme-color alone while off, and removes it when disabled', asy
 });
 
 test('does not rebuild the manifest as the chat changes', async (t) => {
-  const page = setupPage(t, { head: HEAD, body: BODY, settings: ON });
-  await activateExtension(page, fakeHost());
+  const { page } = await start(t, { head: HEAD, body: BODY, settings: ON });
   let styles = 0;
   const { getComputedStyle } = page.window;
   page.window.getComputedStyle = (...args) => {

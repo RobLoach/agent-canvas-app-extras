@@ -124,7 +124,7 @@ test('strips Markdown from the final reply and cuts it on a word', async (t) => 
 });
 
 test('chimes when a run needs confirmation while you are away', async (t) => {
-  const { page, host } = await watchRun(t, { confirmationSound: true });
+  const { page, host } = await watchRun(t, { notificationSounds: true });
   page.hidden = true;
   await finish(page, host, A, 'waiting_for_confirmation');
 
@@ -135,7 +135,7 @@ test('chimes when a run needs confirmation while you are away', async (t) => {
 test('unlocks the chime on the first click or key press after a reload', async (t) => {
   let contexts = 0;
   const { page } = await start(t, {
-    settings: { confirmationSound: true },
+    settings: { notificationSounds: true },
     before(page) {
       const { AudioContext } = page.window;
       page.window.AudioContext = class extends AudioContext {
@@ -168,7 +168,7 @@ test('leaves a run to the window you are watching it in', async (t) => {
 });
 
 test('does not chime while you are watching or when a run finishes', async (t) => {
-  const { page, host } = await watchRun(t, { confirmationSound: true });
+  const { page, host } = await watchRun(t, { notificationSounds: true });
   await finish(page, host, A, 'waiting_for_confirmation');
   page.hidden = true;
   await finish(page, host, A, 'finished');
@@ -306,7 +306,7 @@ test('a notification the browser refuses is not an unhandled error', async (t) =
 });
 
 test('closes its audio when disabled', async (t) => {
-  const { page, host } = await watchRun(t, { confirmationSound: true });
+  const { page, host } = await watchRun(t, { notificationSounds: true });
   page.hidden = true;
   await finish(page, host, A, 'waiting_for_confirmation');
   assert.deepEqual(page.tones, [880, 660]);
@@ -346,7 +346,7 @@ test("says the status in Canvas's language", async (t) => {
 });
 
 test("leaves the open conversation's chime to Canvas's own sound when that's on", async (t) => {
-  const { page, host } = await watchRun(t, { confirmationSound: true });
+  const { page, host } = await watchRun(t, { notificationSounds: true });
   const request = host.agentServer.request;
   host.agentServer.request = async (call) =>
     call.path === '/api/settings'
