@@ -371,8 +371,15 @@ const SWITCHES = [
   {
     key: 'wideCanvas',
     group: 'Chat',
-    label: 'Wide canvas',
-    description: 'Let the chat window use the full width of the canvas.',
+    label: 'Wide chat',
+    description: 'Let the chat use the full width of the page.',
+  },
+  {
+    key: 'focusedNewChat',
+    group: 'Chat',
+    label: 'Focused new chat',
+    description:
+      'Hide the new chat page\'s "What do you want to work on?" heading and tagline, and put the message box at the top.',
   },
   {
     key: 'responsiveTables',
@@ -1855,6 +1862,13 @@ function installableApp(host) {
 const WIDE_CANVAS_CSS =
   '[data-agent-server-ui] .max-w-200.h-full.min-h-0 { max-width: none; }';
 
+// The new chat page (HomeChatLauncher) puts its heading and tagline
+// (HomeHeaderTitle) above the message box, and starts 28% of the way down
+// the page, or further while a new chat starts.
+const FOCUSED_NEW_CHAT_CSS = `
+[data-testid="home-chat-launcher"] div:has(> div > [data-testid="home-header-subtitle"]) { display: none; }
+[data-testid="home-chat-launcher"]:not(.h-full) { padding-top: 2rem; }`;
+
 // Canvas's dialogs (ModalBackdrop: a fixed backdrop, then the content)
 // centre fixed-width content with no height limit, so on a phone a tall or
 // wide one runs off the screen, out of reach. The Automate pages' tab strip
@@ -2741,6 +2755,7 @@ function activate(host) {
     sidebarLinks(host.extension.name),
     settingsView,
     styleSwitch('wideCanvas', WIDE_CANVAS_CSS),
+    styleSwitch('focusedNewChat', FOCUSED_NEW_CHAT_CSS),
     styleSwitch('mobileFixes', MOBILE_FIXES_CSS),
     fontSize(),
     styleSwitch('reduceMotion', REDUCE_MOTION_CSS),

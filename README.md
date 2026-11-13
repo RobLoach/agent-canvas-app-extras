@@ -6,7 +6,8 @@ An [OpenHands](https://www.openhands.dev/) Agent Canvas app that adds a few UI t
 
 | Name | What it does |
 | :-- | :-- |
-| **Wide canvas** | Lets the chat use the full width of the canvas. |
+| **Wide chat** | Lets the chat use the full width of the page. |
+| **Focused new chat** | Hides the new chat page's "What do you want to work on?" heading and tagline, and puts the message box at the top. |
 | **Responsive tables** | Stacks a table's rows when it's too wide for the chat. |
 | **Collapse agent activity** | Folds "Running" and "Reading" chat entries into expandable "Thinking" entries. |
 | **Keyboard shortcuts** | <kbd>?</kbd> lists them, <kbd>/</kbd> focuses the message box, <kbd>Alt</kbd>+<kbd>↑</kbd>/<kbd>↓</kbd> open the previous or next conversation and <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>↓</kbd> the next one waiting for your confirmation or unread, even from the message box, and <kbd>Alt</kbd>+<kbd>N</kbd> starts a new chat. Canvas's own <kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>K</kbd> menu covers the rest. |

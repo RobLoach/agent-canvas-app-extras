@@ -35,6 +35,7 @@ async function openSettings(page, host = fakeHost()) {
 
 const SWITCH_KEYS = [
   'wideCanvas',
+  'focusedNewChat',
   'responsiveTables',
   'quietActivity',
   'keyboardShortcuts',

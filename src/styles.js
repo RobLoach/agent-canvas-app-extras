@@ -10,6 +10,13 @@ import { settings, SWITCHES } from './settings.js';
 export const WIDE_CANVAS_CSS =
   '[data-agent-server-ui] .max-w-200.h-full.min-h-0 { max-width: none; }';
 
+// The new chat page (HomeChatLauncher) puts its heading and tagline
+// (HomeHeaderTitle) above the message box, and starts 28% of the way down
+// the page, or further while a new chat starts.
+export const FOCUSED_NEW_CHAT_CSS = `
+[data-testid="home-chat-launcher"] div:has(> div > [data-testid="home-header-subtitle"]) { display: none; }
+[data-testid="home-chat-launcher"]:not(.h-full) { padding-top: 2rem; }`;
+
 // Canvas's dialogs (ModalBackdrop: a fixed backdrop, then the content)
 // centre fixed-width content with no height limit, so on a phone a tall or
 // wide one runs off the screen, out of reach. The Automate pages' tab strip

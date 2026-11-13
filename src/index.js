@@ -20,6 +20,7 @@ import { watchResponsiveTables } from './tables.js';
 import { installableApp } from './installable.js';
 import {
   CLEAR_FOCUS_CSS,
+  FOCUSED_NEW_CHAT_CSS,
   fontSize,
   LARGER_TARGETS_CSS,
   MOBILE_FIXES_CSS,
@@ -85,6 +86,7 @@ export function activate(host) {
     sidebarLinks(host.extension.name),
     settingsView,
     styleSwitch('wideCanvas', WIDE_CANVAS_CSS),
+    styleSwitch('focusedNewChat', FOCUSED_NEW_CHAT_CSS),
     styleSwitch('mobileFixes', MOBILE_FIXES_CSS),
     fontSize(),
     styleSwitch('reduceMotion', REDUCE_MOTION_CSS),

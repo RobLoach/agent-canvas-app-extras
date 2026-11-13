@@ -20,8 +20,15 @@ export const SWITCHES = [
   {
     key: 'wideCanvas',
     group: 'Chat',
-    label: 'Wide canvas',
-    description: 'Let the chat window use the full width of the canvas.',
+    label: 'Wide chat',
+    description: 'Let the chat use the full width of the page.',
+  },
+  {
+    key: 'focusedNewChat',
+    group: 'Chat',
+    label: 'Focused new chat',
+    description:
+      'Hide the new chat page\'s "What do you want to work on?" heading and tagline, and put the message box at the top.',
   },
   {
     key: 'responsiveTables',
