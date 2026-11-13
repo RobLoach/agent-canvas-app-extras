@@ -2587,14 +2587,30 @@ function activate(host) {
     window.addEventListener(type, onInput, true);
   }
   each('refresh');
-  // One body observer for all: Canvas renders the app card on Customize >
-  // Apps, re-renders the chat as a run's events stream in, and may re-mount
-  // its themed root. Changes to only our own elements are the features'
+  // One body observer for all: Canvas renders Customize's menu, re-renders
+  // the chat as a run's events stream in, and may re-mount its themed root. Changes to only our own elements are the features'
   // doing, and would just run them again for nothing.
+  //
+  // Canvas keeps rendering in a hidden tab, where nobody sees the page: only
+  // the agent status hears of changes there, to check runs it follows, and
+  // the rest catch up once the tab shows again.
+  let missed = false;
   const observer = new MutationObserver((records) => {
-    if (!records.every(ownChange)) each('onDomChange', records);
+    if (records.every(ownChange)) return;
+    if (document.hidden) {
+      missed = true;
+      agentStatus.onDomChange();
+    } else {
+      each('onDomChange', records);
+    }
   });
   observer.observe(document.body, { childList: true, subtree: true });
+  const onVisibility = () => {
+    if (document.hidden || !missed) return;
+    missed = false;
+    each('onDomChange');
+  };
+  document.addEventListener('visibilitychange', onVisibility);
   // Each feature cleans up even if one before it fails, whose error is then
   // passed on for Canvas to report.
   const dispose = () => {
@@ -2602,6 +2618,7 @@ function activate(host) {
     disposed = true;
     if (window[INSTANCE] === dispose) delete window[INSTANCE];
     observer.disconnect();
+    document.removeEventListener('visibilitychange', onVisibility);
     checks.cancel();
     clearTimeout(poll);
     unregisterSettings?.();

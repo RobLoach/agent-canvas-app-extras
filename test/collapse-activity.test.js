@@ -339,3 +339,16 @@ test('reads again only the chat items that change', async (t) => {
   assert.ok(reads.get(second) > 0);
   assert.deepEqual(shown(page), ['Thinking', 'Let me check.', 'Thinking']);
 });
+
+test('waits for a hidden tab to show again before folding new entries', async (t) => {
+  const page = openChat(t, [item(message('On it.'))]);
+  await activateExtension(page, fakeHost());
+  page.hidden = true;
+  chat(page).insertAdjacentHTML('beforeend', item(row('Running <strong>ls</strong>')));
+  await flush();
+  assert.deepEqual(shown(page), ['On it.', 'Running ls']);
+
+  page.returnToTab();
+  await flush();
+  assert.deepEqual(shown(page), ['On it.', 'Thinking']);
+});
