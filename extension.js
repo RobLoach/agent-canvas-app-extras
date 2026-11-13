@@ -394,7 +394,7 @@ const SWITCHES = [
     group: 'Chat',
     label: 'Keyboard shortcuts',
     description:
-      'Press ? to list them: / focuses the message box, Alt+↑ and Alt+↓ open the previous or next conversation, even from the message box, and Alt+N starts a new chat.',
+      'Press ? to list them: / focuses the message box, Alt+↑ and Alt+↓ open the previous or next conversation and Alt+Shift+↓ the next one that needs you, even from the message box, and Alt+N starts a new chat.',
   },
   {
     key: 'tabStatus',
@@ -1969,13 +1969,16 @@ function shortcutList() {
     ['/', 'Focus the message box'],
     [`${alt} ↑`, 'Open the previous conversation in the sidebar'],
     [`${alt} ↓`, 'Open the next conversation in the sidebar'],
+    [`${alt} ⇧ ↓`, 'Open the next conversation that needs you or is unread'],
     [`${alt} N`, 'Start a new chat'],
     [`${mod} K`, "Open Canvas's command menu, e.g. to toggle the sidebar"],
+    [`${mod} Enter`, "Approve the agent's pending action, in Canvas"],
+    [`${mod} ⇧ ${isApple() ? '⌫' : 'Backspace'}`, "Reject the agent's pending action, in Canvas"],
     ['Esc', 'Close this list'],
   ];
 }
 
-function keyboardShortcuts(host) {
+function keyboardShortcuts(host, loadConversations) {
   let returnFocus = null;
   const help = () => document.getElementById(HELP_ID);
 
@@ -2032,22 +2035,43 @@ function keyboardShortcuts(host) {
 
   // The sidebar's conversations, in order, from the open one, by their own
   // links, which carry Canvas's backend.
+  function open(url) {
+    const basePath = new URL(canvasBase()).pathname;
+    host.navigate(`/${(url.pathname + url.search).slice(basePath.length)}`);
+  }
+
   function openNeighbour(step) {
     const conversations = sidebarConversations();
     if (!conversations.length) return;
     const index = conversations.findIndex(({ key }) => key === openConversationId());
     const next =
-      conversations[index === -1 ? (step > 0 ? 0 : conversations.length - 1) : index + step]?.url;
-    const basePath = new URL(canvasBase()).pathname;
-    if (next) host.navigate(`/${(next.pathname + next.search).slice(basePath.length)}`);
+      conversations[index === -1 ? (step > 0 ? 0 : conversations.length - 1) : index + step];
+    if (next) open(next.url);
   }
 
-  // Alt+↑ and Alt+↓ work in the message box too, so you can move on from a
-  // conversation as you write; the others type text there.
+  // The next sidebar conversation after the open one, round to the top, that
+  // waits for your confirmation, from the Agent Server, or else one Unread
+  // markers marks.
+  async function openNeedingYou() {
+    const conversations = sidebarConversations();
+    const index = conversations.findIndex(({ key }) => key === openConversationId());
+    const after = [...conversations.slice(index + 1), ...conversations.slice(0, index + 1)].filter(
+      ({ key }) => key !== openConversationId(),
+    );
+    if (!after.length) return;
+    const infos = await loadConversations(after.map(({ key }) => key)).catch(() => []);
+    const next =
+      after.find((_, at) => infos[at]?.execution_status === 'waiting_for_confirmation') ??
+      after.find(({ card }) => card.querySelector(`[${UNREAD_ATTR}]`));
+    if (next) open(next.url);
+  }
+
+  // Alt+↑, Alt+↓ and Alt+Shift+↓ work in the message box too, so you can move
+  // on from a conversation as you write; the others type text there.
   function actionFor(event, inField) {
     if (event.ctrlKey || event.metaKey) return null;
     if (event.altKey) {
-      if (event.shiftKey) return null;
+      if (event.shiftKey) return event.key === 'ArrowDown' ? openNeedingYou : null;
       if (event.key === 'ArrowUp') return () => openNeighbour(-1);
       if (event.key === 'ArrowDown') return () => openNeighbour(1);
       if (event.code === 'KeyN' && !inField) return () => host.navigate('/conversations');
@@ -2724,7 +2748,7 @@ function activate(host) {
     watchUnread(loadConversations, checks),
     installableApp(host),
     quietActivity,
-    keyboardShortcuts(host),
+    keyboardShortcuts(host, loadConversations),
   ];
   function each(method, ...args) {
     for (const feature of features) feature[method]?.(...args);
