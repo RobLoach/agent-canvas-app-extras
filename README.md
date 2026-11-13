@@ -1,6 +1,6 @@
 # Agent Canvas App: Extras
 
-An [OpenHands](https://www.openhands.dev/) Agent Canvas app that adds a few UI tweaks: agent status in your browser tab and app icon, desktop notifications, keyboard shortcuts, a usage page, and a quieter chat.
+An [OpenHands](https://www.openhands.dev/) Agent Canvas app that adds a few UI tweaks: agent status in your browser tab and app icon, desktop notifications, unread markers, keyboard shortcuts, a usage page, and a quieter chat.
 
 ## Features
 

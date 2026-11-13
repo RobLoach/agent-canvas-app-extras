@@ -66,7 +66,7 @@ function openChat(t, widths, settings = { responsiveTables: true }) {
   return page;
 }
 
-const stacked = (page, id) => page.table(id).classList.contains('bt');
+const stacked = (page, id) => page.table(id).classList.contains('extras-stacked');
 const labels = (page, id) =>
   [...page.table(id).querySelectorAll('tbody td')].map((td) => td.getAttribute('data-th'));
 const style = (page) => page.document.getElementById('openhands-extras-responsive-tables');
@@ -90,7 +90,6 @@ test('stacks a table too wide for the chat, under its headings', async (t) => {
   assert.ok(style(page));
   // The cells' content stays as React rendered it.
   assert.equal(page.table('wide').querySelector('tbody td strong').textContent, 'On');
-  assert.equal(page.document.querySelector('.bt-content'), null);
 });
 
 test('puts a table back once it fits, and stacks it again when it does not', async (t) => {

@@ -19,7 +19,7 @@
         "title": "Usage",
         "path": "/usage",
         "nav_label": "Usage",
-        "description": "What your conversations cost, by day, model and conversation."
+        "description": "What your conversations cost over a period, by model and by conversation."
       }
     ]
   }

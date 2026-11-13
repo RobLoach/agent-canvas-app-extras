@@ -104,10 +104,10 @@ test('asks for nothing while off, and forgets what was read when switched off', 
   assert.equal(page.window.localStorage.getItem(READ), null);
 });
 
-test('checks the sidebar every 30 seconds, and removes its marks when disabled', async (t) => {
+test('checks the sidebar every 20 seconds, and removes its marks when disabled', async (t) => {
   const { page, host } = await open(t);
   host.updated[B] = LATER;
-  await page.wait(30_000);
+  await page.wait(20_000);
   assert.deepEqual(unread(page), ['Beta']);
 
   page.dispose();
