@@ -95,6 +95,7 @@ export function installableApp(host) {
   // that changes, and the theme root followed for its colour.
   let built = null;
   let root = null;
+  let disposed = false;
   const rootObserver = new MutationObserver(() => apply());
   const scheme = window.matchMedia?.('(prefers-color-scheme: dark)');
 
@@ -106,7 +107,8 @@ export function installableApp(host) {
     pngs = null;
     touchIcon = null;
     loadImage(svgUrl).then((image) => {
-      if (pngsFor !== svgUrl) return;
+      // Turned off, or disposed, while the icon loaded.
+      if (pngsFor !== svgUrl || !settings.installableApp || disposed) return;
       const drawn = PNG_ICONS.map(([size, purpose]) => ({
         src: image && pngIcon(image, size, purpose),
         sizes: `${size}x${size}`,
@@ -132,8 +134,11 @@ export function installableApp(host) {
     }
   }
 
+  // Icons are drawn again when it's next on, as a load it was turned off
+  // during is dropped.
   function remove() {
     built = null;
+    pngsFor = null;
     removeElement(MANIFEST_ID);
     removeElement(THEME_META_ID);
     removeElement(TOUCH_ICON_ID);
@@ -219,7 +224,12 @@ export function installableApp(host) {
     if (next === root) return;
     root = next;
     rootObserver.disconnect();
-    if (root) rootObserver.observe(root, { attributes: true });
+    if (root) {
+      rootObserver.observe(root, {
+        attributes: true,
+        attributeFilter: ['class', 'style', 'data-color-theme'],
+      });
+    }
     apply();
   }
 
@@ -242,6 +252,7 @@ export function installableApp(host) {
     },
     onDomChange: track,
     dispose() {
+      disposed = true;
       rootObserver.disconnect();
       scheme?.removeEventListener?.('change', apply);
       remove();

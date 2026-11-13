@@ -251,3 +251,39 @@ test('does not rebuild the manifest as the chat changes', async (t) => {
   await flush();
   assert.equal(styles, 0);
 });
+
+test('adds nothing back when its icons finish drawing after it is disabled', async (t) => {
+  const page = setupPage(t, { head: HEAD, body: BODY, settings: ON });
+  let loaded = null;
+  page.window.Image = class {
+    set src(url) {
+      loaded = () => this.onerror();
+    }
+  };
+  const dispose = await activateExtension(page, fakeHost());
+  dispose();
+  loaded();
+  await flush();
+
+  assert.equal(link(page), null);
+  assert.equal(meta(page, 'apple-mobile-web-app-capable'), undefined);
+  assert.equal(safeArea(page), null);
+});
+
+test('draws its icons again when switched back on', async (t) => {
+  const page = setupPage(t, { head: HEAD, body: BODY, settings: ON });
+  const loads = [];
+  page.window.Image = class {
+    set src(url) {
+      loads.push(() => this.onerror());
+    }
+  };
+  await activateExtension(page, fakeHost());
+  await page.changeSettings({});
+  loads[0]();
+  await page.changeSettings(ON);
+  loads.at(-1)();
+  await flush();
+
+  assert.ok(link(page));
+});

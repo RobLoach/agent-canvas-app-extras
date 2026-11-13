@@ -161,9 +161,8 @@ export function keyboardShortcuts(host, loadConversations) {
       return;
     }
     if (!settings.keyboardShortcuts || event.defaultPrevented || event.isComposing) return;
-    if (canvasDialogOpen()) return;
     const action = actionFor(event, typing(event.target));
-    if (!action) return;
+    if (!action || canvasDialogOpen()) return;
     event.preventDefault();
     action();
   }
