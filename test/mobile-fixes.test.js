@@ -2,13 +2,18 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { activateExtension, fakeHost, setupPage } from './helpers.js';
 
-// Canvas's ModalBackdrop and ManifestSubpageLayout, as they render, and this
+// Canvas's ModalBackdrop and ManifestSubpageLayout, its shell, a button it
+// shows on hover, a conversation's hover preview, as they render, and this
 // app's own shortcuts list, which is styled on its own.
 const BODY = `
+  <div id="shell" data-testid="root-layout" class="h-screen flex flex-col md:flex-row overflow-hidden p-0"></div>
+  <div class="group"><button id="hover-button" class="opacity-0 group-hover:opacity-100">Remove</button></div>
+  <div id="preview-tooltip" class="max-w-none overflow-visible rounded-xl border border-border bg-base-secondary p-0 text-contrast shadow-xl"><div data-testid="conversation-card-preview"></div></div>
   <div id="modal" role="dialog" aria-modal="true" tabindex="-1" class="fixed inset-0 flex items-center justify-center outline-none z-60">
     <div class="fixed inset-0 bg-black opacity-60"></div>
     <div id="frame" class="relative"><div id="body" class="w-96"></div></div>
   </div>
+  <aside id="drawer" data-testid="sidebar-mobile-drawer" class="fixed inset-y-0 left-0 z-50 flex w-[min(300px,85vw)] flex-col"></aside>
   <nav data-testid="automations-navbar-mobile" class="lg:hidden flex gap-1 overflow-x-auto"><a id="tab" href="/automations">Dashboard</a></nav>
   <div id="openhands-extras-shortcuts"><div role="dialog" aria-modal="true" class="relative"></div></div>
   <div role="dialog" aria-modal="true" class="fixed inset-0 z-70 flex items-start justify-center px-3">
@@ -30,16 +35,26 @@ test('Mobile fixes are off by default', async (t) => {
   assert.deepEqual(rules(page), []);
 });
 
-test("keeps Canvas's dialogs on screen, and the Automate tabs at their width", async (t) => {
+test("keeps Canvas's dialogs on screen, the Automate tabs at their width, and the sidebar full width", async (t) => {
   const page = setupPage(t, { body: BODY, settings: { mobileFixes: true } });
   await activateExtension(page, fakeHost());
 
-  for (const id of ['frame', 'body', 'tab']) assert.ok(styled(page, id), id);
+  for (const id of ['frame', 'body', 'tab', 'drawer', 'shell', 'hover-button', 'preview-tooltip']) {
+    assert.ok(styled(page, id), id);
+  }
+  const shell = rules(page).find((rule) => page.document.getElementById('shell').matches(rule.selectorText));
+  assert.equal(shell.style.getPropertyValue('height'), '100dvh');
+  const drawer = rules(page).find((rule) => page.document.getElementById('drawer').matches(rule.selectorText));
+  assert.equal(drawer.style.getPropertyValue('width'), '100%');
   assert.ok(!styled(page, 'modal'));
   assert.ok(!styled(page, 'command-menu'), "Canvas's command menu has its own layout");
   assert.match(
     page.document.getElementById('openhands-extras-mobile-fixes').textContent,
     /@media \(max-width: 767px\)/,
+  );
+  assert.match(
+    page.document.getElementById('openhands-extras-mobile-fixes').textContent,
+    /@media \(hover: none\)/,
   );
   assert.ok(
     ![...page.document.querySelectorAll('#openhands-extras-shortcuts *')].some((element) =>

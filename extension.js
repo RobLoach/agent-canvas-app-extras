@@ -480,7 +480,7 @@ const SWITCHES = [
     group: 'App',
     label: 'Mobile fixes',
     description:
-      "Keep Canvas's dialogs within small screens, scrolling when they're taller, and stop the Automate tabs cutting off their names.",
+      "On phones and tablets: keep the message box above the browser's toolbar, open the sidebar across the whole screen, show buttons that otherwise only appear on hover, keep dialogs on screen, and stop the Automate tabs cutting off their names.",
   },
   {
     key: 'usagePage',
@@ -1857,9 +1857,23 @@ const WIDE_CANVAS_CSS =
 // centre fixed-width content with no height limit, so on a phone a tall or
 // wide one runs off the screen, out of reach. The Automate pages' tab strip
 // (ManifestSubpageLayout) gives its links equal widths that cut their names
-// off, though it can scroll.
+// off, though it can scroll. The sidebar's drawer takes the screen's full
+// width, closing with its own close button, with its right edge padded like
+// its left, and a conversation's hover preview, which opens beside it with
+// no room, is hidden.
+//
+// Canvas's shell is 100vh tall, which on phones includes the space behind
+// the browser's toolbars, hiding the message box under them; 100dvh is the
+// space you see. Touch screens can't hover, so controls Canvas only shows on
+// hover show all the time there.
 const MODAL_FRAME = '[role="dialog"][aria-modal="true"].fixed.inset-0 > .fixed.inset-0 + .relative';
+const HOVER_PREVIEW = '[data-testid="conversation-card-preview"]';
 const MOBILE_FIXES_CSS = `
+[data-testid="root-layout"].h-screen { height: 100dvh; }
+@media (hover: none) {
+  [class*="hover:opacity-100"] { opacity: 1; }
+  [class*="group-hover"][class*=":visible"] { visibility: visible; }
+}
 @media (max-width: 767px) {
   ${MODAL_FRAME} {
     box-sizing: border-box; max-width: 100vw; max-height: 100dvh;
@@ -1867,6 +1881,10 @@ const MOBILE_FIXES_CSS = `
   }
   ${MODAL_FRAME} > * { max-width: 100%; }
   [data-testid$="-navbar-mobile"] > a { flex: none; width: auto; }
+  [data-testid="sidebar-mobile-drawer"] {
+    width: 100%; border-right: none; padding-right: 0.625rem;
+  }
+  [role="tooltip"]:has(${HOVER_PREVIEW}), .shadow-xl:has(> ${HOVER_PREVIEW}) { display: none; }
 }`;
 
 // The page's root font size, which Canvas's rem-based sizes follow, from the
