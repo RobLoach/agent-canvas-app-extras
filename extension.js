@@ -371,6 +371,42 @@ function setStyle(id, css) {
   setProperty(headElement(id, 'style'), 'textContent', css);
 }
 
+// An element with these classes, holding text or other nodes.
+function el(tag, className, ...children) {
+  const element = document.createElement(tag);
+  if (className) element.className = className;
+  element.append(...children);
+  return element;
+}
+
+// Class strings from Canvas's own components, so they're compiled.
+const FOCUS_RING = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus';
+const HAS_FOCUS_RING =
+  'has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-focus';
+// A round toggle, as Font size and the usage page's periods draw theirs.
+const pillClass = (on, focus = FOCUS_RING) =>
+  `cursor-pointer rounded-full border px-3 py-1 text-sm ${focus} ${on ? 'border-contrast bg-contrast text-contrast-foreground' : 'border-border text-muted hover:text-contrast'}`;
+
+function textButton(testid, text, onClick, look = 'underline') {
+  const button = el('button', `w-fit cursor-pointer rounded-sm text-sm ${look} ${FOCUS_RING}`, text);
+  button.type = 'button';
+  button.dataset.testid = testid;
+  button.addEventListener('click', onClick);
+  return button;
+}
+
+// The parts of this app's pages, as Canvas lays out its settings pages.
+const pageHeader = (title, description) =>
+  el(
+    'div',
+    'min-w-0 space-y-1',
+    el('h2', 'text-xl font-semibold leading-6 text-foreground', title),
+    el('p', 'max-w-2xl text-sm text-tertiary-light', description),
+  );
+const pageSection = (title, ...children) =>
+  el('section', 'flex min-w-0 flex-col gap-3', el('h3', 'text-base font-semibold text-foreground', title), ...children);
+const note = (text) => el('p', 'text-sm text-tertiary-light', text);
+
 // The elements this app adds to Canvas's page body.
 const OWN_SELECTOR = `#${SECTION_ID}, [${OWN_ATTR}], [${THINKING_ATTR}], [${CHIP_LABEL_ATTR}], [${UNREAD_ATTR}]`;
 const ownNode = (node) => node.nodeType === Node.ELEMENT_NODE && node.matches(OWN_SELECTOR);
@@ -727,7 +763,7 @@ function buildThinking(onToggle) {
   row.className = 'my-1 w-full py-1 text-sm';
   row.setAttribute(THINKING_ATTR, '');
   row.innerHTML = `
-    <button type="button" aria-expanded="false" class="w-full flex items-center gap-2 text-left cursor-pointer rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">
+    <button type="button" aria-expanded="false" class="w-full flex items-center gap-2 text-left cursor-pointer rounded-sm ${FOCUS_RING}">
       <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="h-4 w-4 fill-muted flex-shrink-0"><path d="${CHEVRON_PATH}"/></svg>
       <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-muted flex-shrink-0"><path fill="currentColor" d="${LIGHTBULB_PATH}"/></svg>
       <span class="font-normal text-muted motion-reduce:animate-none"></span>
@@ -1036,19 +1072,13 @@ async function notify(host, { id, title, status, icon, isOpen, isDisposed }) {
 
 // A choice as a row of radio buttons, drawn as pills.
 function buildChoice(item, onChange) {
-  const block = document.createElement('fieldset');
-  block.className = 'flex min-w-0 flex-col gap-2';
-  block.innerHTML = `
-    <legend class="text-sm"></legend>
-    <div class="flex flex-wrap gap-2"></div>
-    <p id="extras-${item.key}-hint" class="text-xs leading-relaxed text-tertiary-light"></p>`;
-  block.querySelector('legend').textContent = item.label;
-  block.querySelector('p').textContent = item.description;
-  const row = block.querySelector('div');
+  const row = el('div', 'flex flex-wrap gap-2');
+  const hint = el('p', 'text-xs leading-relaxed text-tertiary-light', item.description);
+  hint.id = `extras-${item.key}-hint`;
+  const block = el('fieldset', 'flex min-w-0 flex-col gap-2', el('legend', 'text-sm', item.label), row, hint);
   const render = () => {
     for (const label of row.children) {
-      const on = label.firstElementChild.checked;
-      label.className = `cursor-pointer rounded-full border px-3 py-1 text-sm has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-focus ${on ? 'border-contrast bg-contrast text-contrast-foreground' : 'border-border text-muted hover:text-contrast'}`;
+      label.className = pillClass(label.firstElementChild.checked, HAS_FOCUS_RING);
     }
   };
   for (const [value, text] of item.options) {
@@ -1072,7 +1102,7 @@ function buildSwitch(item, onChange) {
   const block = document.createElement('div');
   block.className = 'flex min-w-0 flex-col gap-1';
   block.innerHTML = `
-    <label class="flex items-center gap-2 rounded-sm has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-focus w-fit cursor-pointer">
+    <label class="flex items-center gap-2 rounded-sm ${HAS_FOCUS_RING} w-fit cursor-pointer">
       <input class="sr-only" type="checkbox" role="switch" data-testid="extras-${item.key}-switch" aria-describedby="extras-${item.key}-hint" />
       <span aria-hidden="true"><span></span></span>
       <span class="flex items-center gap-1">
@@ -1162,10 +1192,9 @@ const CUSTOMIZE_ITEMS = [
 ];
 
 // A link to a Canvas path, which Canvas's router follows on a plain click.
-function canvasLink(host, path, className) {
-  const link = document.createElement('a');
+function canvasLink(host, path, className, text = '') {
+  const link = el('a', className, text);
   link.href = new URL(path.slice(1), canvasBase()).href;
-  link.className = className;
   link.addEventListener('click', (event) => {
     if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
       return;
@@ -1233,20 +1262,20 @@ function watchAppCard(host) {
     const footer = document.querySelector(`${cardSelector} > footer`);
     if (!footer || footer.previousElementSibling?.id === SECTION_ID) return;
     removeElement(SECTION_ID);
-    const section = document.createElement('section');
-    section.id = SECTION_ID;
-    section.className = 'flex min-w-0 flex-col gap-1 border-t border-border pt-3';
     const link = canvasLink(
       host,
       pageHref(name, SETTINGS_PAGE),
-      'w-fit rounded-sm text-sm text-link hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus',
+      `w-fit rounded-sm text-sm text-link hover:underline ${FOCUS_RING}`,
+      'Extras settings',
     );
     link.dataset.testid = 'extras-open-settings';
-    link.textContent = 'Extras settings';
-    const hint = document.createElement('p');
-    hint.className = 'text-xs leading-relaxed text-tertiary-light';
-    hint.textContent = 'Turn its features on and off, also under Customize > Extras.';
-    section.append(link, hint);
+    const section = el(
+      'section',
+      'flex min-w-0 flex-col gap-1 border-t border-border pt-3',
+      link,
+      el('p', 'text-xs leading-relaxed text-tertiary-light', 'Turn its features on and off, also under Customize > Extras.'),
+    );
+    section.id = SECTION_ID;
     footer.before(section);
   }
   return {
@@ -1265,37 +1294,25 @@ function settingsPage(host, onChange) {
 
   function render() {
     if (!list) return;
-    const groups = SWITCH_GROUPS.map((group) => {
-      const section = document.createElement('section');
-      section.className = 'flex min-w-0 flex-col gap-4';
-      const heading = document.createElement('h3');
-      heading.className = 'text-base font-semibold text-foreground';
-      heading.textContent = group;
-      section.append(
-        heading,
+    const groups = SWITCH_GROUPS.map((group) =>
+      pageSection(
+        group,
         ...SWITCHES.filter((item) => item.group === group).map((item) =>
           (item.options ? buildChoice : buildSwitch)(item, onChange),
         ),
-      );
-      if (group === 'Chat') {
-        const show = document.createElement('button');
-        show.type = 'button';
-        show.dataset.testid = 'extras-show-shortcuts';
-        show.className =
-          'w-fit cursor-pointer rounded-sm text-sm text-link hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus';
-        show.textContent = 'Show keyboard shortcuts';
-        show.addEventListener('click', () => showShortcuts?.());
-        section.append(show);
-      }
-      return section;
-    });
-    const reset = document.createElement('button');
-    reset.type = 'button';
-    reset.dataset.testid = 'extras-reset-settings';
-    reset.className =
-      'w-fit cursor-pointer rounded-sm text-sm underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus';
-    reset.textContent = 'Reset settings';
-    reset.addEventListener('click', () => {
+        ...(group === 'Chat'
+          ? [
+              textButton(
+                'extras-show-shortcuts',
+                'Show keyboard shortcuts',
+                () => showShortcuts?.(),
+                'text-link hover:underline',
+              ),
+            ]
+          : []),
+      ),
+    );
+    const reset = textButton('extras-reset-settings', 'Reset settings', () => {
       onChange(null);
       render();
     });
@@ -1304,34 +1321,34 @@ function settingsPage(host, onChange) {
 
   function mount({ container }) {
     const name = host.extension.name;
-    const root = document.createElement('div');
-    root.setAttribute(OWN_ATTR, '');
-    root.className = 'flex min-h-full gap-4 md:gap-6 md:pl-8 lg:gap-10 lg:pl-10';
-    root.innerHTML = `
-      <aside class="hidden lg:flex lg:w-65 lg:shrink-0 lg:flex-col lg:gap-2 lg:sticky lg:top-8 lg:self-start">
-        <span class="px-2 text-sm font-normal text-contrast">Customize</span>
-        <div class="flex flex-col gap-0.5 pt-0.5"></div>
-      </aside>
-      <div class="flex min-w-0 flex-1 flex-col px-4 pt-8 pb-12 lg:px-0 lg:pr-3.5">
-        <div class="mx-auto flex w-full min-w-0 max-w-200 flex-col gap-6">
-          <div class="min-w-0 space-y-1">
-            <span class="lg:hidden" data-extras-back></span>
-            <h2 class="text-xl font-semibold leading-6 text-foreground">Extras</h2>
-            <p class="max-w-2xl text-sm text-tertiary-light">Agent status in your tab and app icon, notifications, unread markers, a quieter chat and more. Settings are kept in this browser.</p>
-          </div>
-          <div class="flex min-w-0 flex-col gap-8"></div>
-        </div>
-      </div>`;
-    root.querySelector('aside > div').append(
-      ...CUSTOMIZE_ITEMS.map(([path, label, icon]) => navLink(host, path, label, icon, false)),
-      navLink(host, pageHref(name, SETTINGS_PAGE), 'Extras', NAV_ICONS.extras, true),
+    const own = el('div', 'flex min-w-0 flex-col gap-8');
+    const header = pageHeader(
+      'Extras',
+      'Agent status in your tab and app icon, notifications, unread markers, a quieter chat and more. Settings are kept in this browser.',
     );
     // Customize's menu only shows on wide screens, as in Canvas.
-    const back = canvasLink(host, '/apps', 'text-sm text-link hover:underline');
-    back.textContent = '← Customize';
-    root.querySelector('[data-extras-back]').replaceWith(back);
-    back.classList.add('lg:hidden');
-    const own = root.querySelector('.gap-8');
+    header.prepend(canvasLink(host, '/apps', 'lg:hidden text-sm text-link hover:underline', '← Customize'));
+    const root = el(
+      'div',
+      'flex min-h-full gap-4 md:gap-6 md:pl-8 lg:gap-10 lg:pl-10',
+      el(
+        'aside',
+        'hidden lg:flex lg:w-65 lg:shrink-0 lg:flex-col lg:gap-2 lg:sticky lg:top-8 lg:self-start',
+        el('span', 'px-2 text-sm font-normal text-contrast', 'Customize'),
+        el(
+          'div',
+          'flex flex-col gap-0.5 pt-0.5',
+          ...CUSTOMIZE_ITEMS.map(([path, label, icon]) => navLink(host, path, label, icon, false)),
+          navLink(host, pageHref(name, SETTINGS_PAGE), 'Extras', NAV_ICONS.extras, true),
+        ),
+      ),
+      el(
+        'div',
+        'flex min-w-0 flex-1 flex-col px-4 pt-8 pb-12 lg:px-0 lg:pr-3.5',
+        el('div', 'mx-auto flex w-full min-w-0 max-w-200 flex-col gap-6', header, own),
+      ),
+    );
+    root.setAttribute(OWN_ATTR, '');
     list = own;
     render();
     container.append(root);
@@ -2235,18 +2252,17 @@ function keyboardShortcuts(host) {
       <div role="dialog" aria-modal="true" aria-labelledby="${HELP_ID}-title" class="w-full max-w-md rounded-xl border border-border bg-base-secondary p-6 text-contrast">
         <h2 id="${HELP_ID}-title" class="text-lg font-semibold">Keyboard shortcuts</h2>
         <dl class="mt-4 flex flex-col gap-2 text-sm"></dl>
-        <button type="button" class="mt-6 cursor-pointer rounded-sm text-sm underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">Close</button>
+        <button type="button" class="mt-6 cursor-pointer rounded-sm text-sm underline ${FOCUS_RING}">Close</button>
       </div>`;
     overlay.querySelector('dl').append(
-      ...shortcutList().map(([keys, action]) => {
-        const row = document.createElement('div');
-        row.className = 'flex items-baseline justify-between gap-4';
-        row.innerHTML =
-          '<dt><kbd class="rounded-sm border border-border px-1.5 py-0.5 font-mono text-xs"></kbd></dt><dd class="text-right text-tertiary-light"></dd>';
-        row.querySelector('kbd').textContent = keys;
-        row.querySelector('dd').textContent = action;
-        return row;
-      }),
+      ...shortcutList().map(([keys, action]) =>
+        el(
+          'div',
+          'flex items-baseline justify-between gap-4',
+          el('dt', '', el('kbd', 'rounded-sm border border-border px-1.5 py-0.5 font-mono text-xs', keys)),
+          el('dd', 'text-right text-tertiary-light', action),
+        ),
+      ),
     );
     overlay.addEventListener('click', (event) => {
       if (event.target === overlay) closeHelp();
@@ -2438,34 +2454,15 @@ function usagePage(host) {
     const count = new Intl.NumberFormat(language, { notation: 'compact', maximumFractionDigits: 1 });
     const cost = (value) => (value > 0 && value < 0.01 ? `< ${money.format(0.01)}` : money.format(value));
 
-    const root = document.createElement('div');
-    root.setAttribute(OWN_ATTR, '');
-    root.className = 'px-4 pt-8 pb-12';
-    root.innerHTML = `
-      <div class="mx-auto flex w-full min-w-0 max-w-200 flex-col gap-6">
-        <div class="flex min-w-0 items-start justify-between gap-4">
-          <div class="min-w-0 space-y-1">
-            <h2 class="text-xl font-semibold leading-6 text-foreground">Usage</h2>
-            <p class="max-w-2xl text-sm text-tertiary-light">What your conversations on this Agent Server cost, from its own records of each LLM call.</p>
-          </div>
-          <button type="button" data-testid="extras-usage-refresh" class="shrink-0 cursor-pointer rounded-md border border-border px-3 py-1.5 text-sm text-contrast hover:bg-surface-raised focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">Refresh</button>
-        </div>
-        <div role="group" aria-label="Period" class="flex flex-wrap gap-2"></div>
-        <p role="status" class="sr-only"></p>
-        <div class="flex min-w-0 flex-col gap-6"></div>
-      </div>`;
-    const periods = root.querySelector('[role="group"]');
-    const status = root.querySelector('[role="status"]');
-    const body = status.nextElementSibling;
-    const refresh = root.querySelector('[data-testid="extras-usage-refresh"]');
-    const periodLabel = () => USAGE_PERIODS.find(([value]) => value === period)[1];
+    const refresh = textButton('extras-usage-refresh', 'Refresh', () => load(), 'shrink-0 rounded-md border border-border px-3 py-1.5 text-contrast hover:bg-surface-raised');
     // The period buttons stay, so focus stays on the one chosen.
-    periods.append(
+    const periods = el(
+      'div',
+      'flex flex-wrap gap-2',
       ...USAGE_PERIODS.map(([value, label]) => {
-        const button = document.createElement('button');
+        const button = el('button', '', label);
         button.type = 'button';
         button.dataset.period = value;
-        button.textContent = label;
         button.addEventListener('click', () => {
           period = value;
           render();
@@ -2473,52 +2470,48 @@ function usagePage(host) {
         return button;
       }),
     );
+    periods.setAttribute('role', 'group');
+    periods.setAttribute('aria-label', 'Period');
+    const status = el('p', 'sr-only');
+    status.setAttribute('role', 'status');
+    const body = el('div', 'flex min-w-0 flex-col gap-6');
+    const root = el(
+      'div',
+      'px-4 pt-8 pb-12',
+      el(
+        'div',
+        'mx-auto flex w-full min-w-0 max-w-200 flex-col gap-6',
+        el(
+          'div',
+          'flex min-w-0 items-start justify-between gap-4',
+          pageHeader('Usage', 'What your conversations on this Agent Server cost, from its own records of each LLM call.'),
+          refresh,
+        ),
+        periods,
+        status,
+        body,
+      ),
+    );
+    root.setAttribute(OWN_ATTR, '');
+    const periodLabel = () => USAGE_PERIODS.find(([value]) => value === period)[1];
 
     function table(headings, rows) {
-      const element = document.createElement('table');
-      element.className = 'w-full text-sm';
-      element.innerHTML = '<thead><tr></tr></thead><tbody></tbody>';
-      for (const [index, heading] of headings.entries()) {
-        const th = document.createElement('th');
-        th.className = `py-2 font-normal text-tertiary-light ${index ? 'text-right' : 'text-left'}`;
-        th.textContent = heading;
-        element.querySelector('tr').append(th);
-      }
-      for (const cells of rows) {
-        const tr = document.createElement('tr');
-        for (const [index, cell] of cells.entries()) {
-          const td = document.createElement('td');
-          td.className = `border-t border-border py-2 ${index ? 'text-right tabular-nums whitespace-nowrap pl-4' : 'min-w-0 break-words'}`;
-          td.append(cell);
-          tr.append(td);
-        }
-        element.querySelector('tbody').append(tr);
-      }
-      return element;
-    }
-
-    function section(title, ...content) {
-      const element = document.createElement('section');
-      element.className = 'flex min-w-0 flex-col gap-2';
-      const heading = document.createElement('h3');
-      heading.className = 'text-base font-semibold text-foreground';
-      heading.textContent = title;
-      element.append(heading, ...content);
-      return element;
-    }
-
-    function note(text) {
-      const element = document.createElement('p');
-      element.className = 'text-sm text-tertiary-light';
-      element.textContent = text;
-      return element;
+      const head = headings.map((heading, index) =>
+        el('th', `py-2 font-normal text-tertiary-light ${index ? 'text-right' : 'text-left'}`, heading),
+      );
+      const body = rows.map((cells) =>
+        el('tr', '', ...cells.map((cell, index) =>
+          el('td', `border-t border-border py-2 ${index ? 'text-right tabular-nums whitespace-nowrap pl-4' : 'min-w-0 break-words'}`, cell),
+        )),
+      );
+      return el('table', 'w-full text-sm', el('thead', '', el('tr', '', ...head)), el('tbody', '', ...body));
     }
 
     function render() {
       for (const button of periods.children) {
         const on = button.dataset.period === period;
         button.setAttribute('aria-pressed', String(on));
-        button.className = `cursor-pointer rounded-full border px-3 py-1 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus ${on ? 'border-contrast bg-contrast text-contrast-foreground' : 'border-border text-muted hover:text-contrast'}`;
+        button.className = pillClass(on);
       }
       const loading = settings.usagePage && !data && !error;
       refresh.disabled = loading;
@@ -2528,8 +2521,8 @@ function usagePage(host) {
           host,
           pageHref(host.extension.name, SETTINGS_PAGE),
           'text-link hover:underline',
+          'Extras settings',
         );
-        link.textContent = 'Extras settings';
         const off = note('The usage page is off. Turn it on in ');
         off.append(link, '.');
         body.replaceChildren(off);
@@ -2551,29 +2544,29 @@ function usagePage(host) {
         periodStart(period),
       );
       status.textContent = `${cost(total)} in ${periodLabel().toLowerCase()}`;
-      const stats = document.createElement('dl');
-      stats.className = 'grid gap-3';
+      const stats = el(
+        'dl',
+        'grid gap-3',
+        ...[
+          ['Cost', cost(total)],
+          ['Conversations', String(rows.length)],
+          ['Average per conversation', rows.length ? cost(total / rows.length) : '–'],
+        ].map(([label, value]) =>
+          el(
+            'div',
+            'rounded-xl border border-border bg-base-secondary p-4',
+            el('dt', 'text-sm text-tertiary-light', label),
+            el('dd', 'mt-1 text-xl font-semibold text-contrast tabular-nums', value),
+          ),
+        ),
+      );
       stats.style.gridTemplateColumns = 'repeat(auto-fit, minmax(10rem, 1fr))';
-      for (const [label, value] of [
-        ['Cost', cost(total)],
-        ['Conversations', String(rows.length)],
-        ['Average per conversation', rows.length ? cost(total / rows.length) : '–'],
-      ]) {
-        const tile = document.createElement('div');
-        tile.className = 'rounded-xl border border-border bg-base-secondary p-4';
-        tile.innerHTML = '<dt class="text-sm text-tertiary-light"></dt><dd class="mt-1 text-xl font-semibold text-contrast tabular-nums"></dd>';
-        tile.querySelector('dt').textContent = label;
-        tile.querySelector('dd').textContent = value;
-        stats.append(tile);
-      }
       if (!rows.length) {
         body.replaceChildren(stats, note(undated > 0 ? `No dated costs in this period; ${cost(undated)} more has no date, so only All time counts it.` : 'No costs in this period.'));
         return;
       }
       const titleLink = (row) => {
-        const link = canvasLink(host, `/conversations/${conversationKey(row.id)}`, 'text-contrast hover:underline');
-        link.textContent = row.title;
-        return link;
+        return canvasLink(host, `/conversations/${conversationKey(row.id)}`, 'text-contrast hover:underline', row.title);
       };
       const notes = [];
       if (undated > 0) {
@@ -2590,8 +2583,8 @@ function usagePage(host) {
       );
       body.replaceChildren(
         stats,
-        section('By model', table(['Model', 'Cost'], models.map(([model, value]) => [model, cost(value)]))),
-        section(
+        pageSection('By model', table(['Model', 'Cost'], models.map(([model, value]) => [model, cost(value)]))),
+        pageSection(
           'Conversations',
           table(
             ['Conversation', 'Tokens, all time', 'Cost'],
@@ -2625,7 +2618,6 @@ function usagePage(host) {
       render();
     }
 
-    refresh.addEventListener('click', load);
     container.append(root);
     load();
     return () => {
