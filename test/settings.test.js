@@ -270,3 +270,12 @@ test('shows the keyboard shortcuts, and links back to Customize on small screens
   back.click();
   assert.deepEqual(host.navigations, ['/apps']);
 });
+
+test("keeps each switch's hidden checkbox inside its label, so focusing it doesn't scroll the page", async (t) => {
+  const page = setupPage(t, { url: SETTINGS_URL });
+  await openSettings(page);
+
+  for (const key of SWITCH_KEYS) {
+    assert.ok(switchFor(page, key).closest('label').classList.contains('relative'), key);
+  }
+});

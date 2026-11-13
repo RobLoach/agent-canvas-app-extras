@@ -87,10 +87,12 @@ export const SWITCHES = [
       "Make Canvas's text, and the space around it, smaller or larger in this browser.",
     // Choices as [value, label, the page's root font size].
     options: [
-      ['small', 'Smaller', '90%'],
+      ['smallest', 'Smallest', '75%'],
+      ['smaller', 'Smaller', '87.5%'],
+      ['small', 'Small', '93.75%'],
       ['default', 'Default', null],
-      ['large', 'Larger', '112.5%'],
-      ['larger', 'Even larger', '125%'],
+      ['large', 'Large', '112.5%'],
+      ['larger', 'Larger', '125%'],
       ['largest', 'Largest', '150%'],
     ],
     default: 'default',
