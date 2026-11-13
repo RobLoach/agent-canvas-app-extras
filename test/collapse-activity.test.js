@@ -328,6 +328,11 @@ test('reads again only the chat items that change', async (t) => {
     };
   }
 
+  // A change elsewhere on the page doesn't read the chat at all.
+  page.mutate();
+  await flush();
+  assert.deepEqual([reads.get(first), reads.get(second)], [0, 0]);
+
   second.insertAdjacentHTML('beforeend', row('Reading <code>a.js</code>'));
   await flush();
   assert.equal(reads.get(first), 0);

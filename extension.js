@@ -1300,6 +1300,12 @@ function watchCollapseActivity(statusOf) {
   // Each chat item as last read, read again only once it changes, so a
   // streaming run doesn't rescan the whole chat on every update.
   let readItems = new WeakMap();
+  // What was hidden, and whether shown, and the toggles placed, last time, so
+  // only what changes is written.
+  let lastHidden = new Map();
+  let placedToggles = new Set();
+  // Each toggle's look as last drawn.
+  const toggleStates = new WeakMap();
   const find = (current, selector) =>
     current?.isConnected ? current : document.querySelector(selector);
   const running = () => {
@@ -1322,6 +1328,8 @@ function watchCollapseActivity(statusOf) {
     removeElement(COLLAPSE_STYLE_ID);
     toggles = new WeakMap();
     foldRows = new WeakMap();
+    lastHidden = new Map();
+    placedToggles = new Set();
     readItems = new WeakMap();
   }
 
@@ -1362,14 +1370,19 @@ function watchCollapseActivity(statusOf) {
     return entry;
   }
 
-  // Forget the chat items that changed, as the body observer reported them.
+  // Forget the chat items that changed, as the body observer reported them,
+  // and say whether anything in the chat did.
   function forgetChanged(records) {
-    if (!chat?.isConnected) return;
+    if (!chat?.isConnected) return true;
+    let changed = false;
     for (const { target } of records) {
+      if (target !== chat && !chat.contains(target)) continue;
+      changed = true;
       let node = target;
       while (node && node.parentElement !== chat) node = node.parentElement;
       if (node) readItems.delete(node);
     }
+    return changed;
   }
 
   // Runs of items with foldable rows: a stretch starts at any item with some,
@@ -1411,7 +1424,9 @@ function watchCollapseActivity(statusOf) {
     if (label.nextElementSibling !== ours) label.after(ours);
   }
 
-  function apply() {
+  // Changes outside the chat only touch the chip, unless the chat itself is
+  // replaced; everything else reads the chat again.
+  function apply(chatChanged = true) {
     if (disposed) return;
     if (!settings.collapseActivity) {
       if (active) reveal();
@@ -1424,9 +1439,12 @@ function watchCollapseActivity(statusOf) {
       COLLAPSE_STYLE_ID,
       `[${FOLDED_ATTR}]:not([${SHOWN_ATTR}]) { display: none !important; }`,
     );
+    // The chat and its activity chip are only on a conversation's page.
+    if (!openConversationId()) return;
     relabelChip();
+    const previous = chat;
     chat = find(chat, '[data-testid="chat-scroll-container"]');
-    if (!chat) return;
+    if (!chat || (!chatChanged && chat === previous)) return;
     const items = [...chat.children].map(itemEntry);
     pulsing = running();
     // Hide whole items, except the last of each stretch, which holds the
@@ -1446,31 +1464,41 @@ function watchCollapseActivity(statusOf) {
         const nodes = entry.whole && entry !== last ? [entry.item] : entry.foldable;
         for (const node of nodes) hidden.set(node, open);
       }
-      thinking.querySelector('svg').classList.toggle('rotate-180', open);
-      const label = thinking.querySelector('span');
-      setProperty(label, 'textContent', labels.thinking);
       // Canvas's own pulse, which the label stops for people who ask for less
       // motion.
-      label.classList.toggle('animate-pulse', pulsing && last === items.at(-1));
+      const pulse = pulsing && last === items.at(-1);
+      const state = `${open}|${pulse}|${labels.thinking}`;
+      if (toggleStates.get(thinking) !== state) {
+        toggleStates.set(thinking, state);
+        thinking.querySelector('svg').classList.toggle('rotate-180', open);
+        const label = thinking.querySelector('span');
+        setProperty(label, 'textContent', labels.thinking);
+        label.classList.toggle('animate-pulse', pulse);
+      }
       if (last.item.lastElementChild !== thinking) last.item.append(thinking);
     }
-    for (const { item, rows } of items) {
-      for (const node of [item, ...rows]) {
-        toggleAttr(node, FOLDED_ATTR, hidden.has(node));
-        toggleAttr(node, SHOWN_ATTR, hidden.get(node) === true);
-      }
+    for (const node of lastHidden.keys()) {
+      if (hidden.has(node)) continue;
+      node.removeAttribute(FOLDED_ATTR);
+      node.removeAttribute(SHOWN_ATTR);
     }
-    for (const thinking of chat.querySelectorAll(`[${THINKING_ATTR}]`)) {
+    for (const [node, open] of hidden) {
+      if (lastHidden.get(node) === open) continue;
+      toggleAttr(node, FOLDED_ATTR, true);
+      toggleAttr(node, SHOWN_ATTR, open);
+    }
+    lastHidden = hidden;
+    for (const thinking of placedToggles) {
       if (!used.has(thinking)) thinking.remove();
     }
+    placedToggles = used;
   }
 
   return {
-    onDomChange(records = []) {
-      forgetChanged(records);
-      apply();
+    onDomChange(records) {
+      apply(records ? forgetChanged(records) : true);
     },
-    refresh: apply,
+    refresh: () => apply(),
     // Statuses are checked every few seconds; only the open conversation
     // starting or stopping changes anything here.
     onStatus() {
