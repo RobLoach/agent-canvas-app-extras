@@ -785,6 +785,9 @@ function watchQuietActivity(statusOf) {
   let chat = null;
   let chip = null;
   let quietRows = new WeakMap();
+  // Each chat item as last read, read again only once it changes, so a
+  // streaming run doesn't rescan the whole chat on every update.
+  let readItems = new WeakMap();
   const find = (current, selector) =>
     current?.isConnected ? current : document.querySelector(selector);
   const running = () => {
@@ -807,6 +810,7 @@ function watchQuietActivity(statusOf) {
     removeElement(QUIET_STYLE_ID);
     toggles = new WeakMap();
     quietRows = new WeakMap();
+    readItems = new WeakMap();
   }
 
   // Each chat item's event rows, the quiet ones among them, and whether
@@ -834,7 +838,26 @@ function watchQuietActivity(statusOf) {
     );
     const whole =
       children.length > 0 && children.every((child) => quiet.includes(child));
-    return { item, rows, quiet, whole };
+    return { item, rows, quiet, whole, labels };
+  }
+
+  function itemEntry(item) {
+    let entry = readItems.get(item);
+    if (entry?.labels !== labels) {
+      entry = readItem(item);
+      readItems.set(item, entry);
+    }
+    return entry;
+  }
+
+  // Forget the chat items that changed, as the body observer reported them.
+  function forgetChanged(records) {
+    if (!chat?.isConnected) return;
+    for (const { target } of records) {
+      let node = target;
+      while (node && node.parentElement !== chat) node = node.parentElement;
+      if (node) readItems.delete(node);
+    }
   }
 
   // Runs of items with quiet rows: a stretch starts at any item with some,
@@ -892,7 +915,7 @@ function watchQuietActivity(statusOf) {
     relabelChip();
     chat = find(chat, '[data-testid="chat-scroll-container"]');
     if (!chat) return;
-    const items = [...chat.children].map(readItem);
+    const items = [...chat.children].map(itemEntry);
     pulsing = running();
     // Hide whole items, except the last of each stretch, which holds the
     // toggle and hides just its rows.
@@ -931,7 +954,10 @@ function watchQuietActivity(statusOf) {
   }
 
   return {
-    onDomChange: apply,
+    onDomChange(records = []) {
+      forgetChanged(records);
+      apply();
+    },
     refresh: apply,
     // Statuses are checked every few seconds; only the open conversation
     // starting or stopping changes anything here.
@@ -2741,7 +2767,7 @@ export function activate(host) {
   // its themed root. Changes to only our own elements are the features'
   // doing, and would just run them again for nothing.
   const observer = new MutationObserver((records) => {
-    if (!records.every(ownChange)) each('onDomChange');
+    if (!records.every(ownChange)) each('onDomChange', records);
   });
   observer.observe(document.body, { childList: true, subtree: true });
   // Each feature cleans up even if one before it fails, whose error is then

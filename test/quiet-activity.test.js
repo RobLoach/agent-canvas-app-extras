@@ -311,3 +311,26 @@ test('one feature failing to clean up still lets the rest clean up', async (t) =
   assert.equal(toggles(page).length, 0);
   assert.equal(page.document.getElementById('openhands-extras-quiet-activity'), null);
 });
+
+test('reads again only the chat items that change', async (t) => {
+  const page = openChat(t, [
+    item(row('Running <strong>ls</strong>')),
+    item(message('Let me check.')),
+  ]);
+  await activateExtension(page, fakeHost());
+  const [first, second] = chat(page).children;
+  const reads = new Map([[first, 0], [second, 0]]);
+  for (const element of [first, second]) {
+    const query = element.querySelectorAll.bind(element);
+    element.querySelectorAll = (selector) => {
+      reads.set(element, reads.get(element) + 1);
+      return query(selector);
+    };
+  }
+
+  second.insertAdjacentHTML('beforeend', row('Reading <code>a.js</code>'));
+  await flush();
+  assert.equal(reads.get(first), 0);
+  assert.ok(reads.get(second) > 0);
+  assert.deepEqual(shown(page), ['Thinking', 'Let me check.', 'Thinking']);
+});
