@@ -15,7 +15,7 @@ import {
 // status is 'follow' for a feature that needs conversation statuses, and
 // 'count' for one that also needs how many conversations need your input.
 // The settings page lists them under their group, in this order.
-export const SWITCH_GROUPS = ['Chat', 'Notifications', 'Accessibility', 'Phone and app', 'Pages'];
+export const SWITCH_GROUPS = ['Chat', 'Notifications', 'Accessibility', 'Phone and app'];
 export const SWITCHES = [
   {
     key: 'wideChat',
@@ -125,12 +125,6 @@ export const SWITCHES = [
     group: 'Phone and app',
     label: 'Mobile fixes',
     description: "Fit Canvas's sidebar, dialogs, buttons and message box to phones and tablets.",
-  },
-  {
-    key: 'usagePage',
-    group: 'Pages',
-    label: 'Usage page',
-    description: 'Add a Usage page to the sidebar, with what your conversations cost.',
   },
 ];
 const DEFAULT_SETTINGS = Object.fromEntries(

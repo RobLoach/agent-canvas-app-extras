@@ -1,6 +1,6 @@
 # Agent Canvas App: Extras
 
-An [OpenHands](https://www.openhands.dev/) Agent Canvas app that adds a few UI tweaks: agent status in your browser tab and app icon, desktop notifications, unread markers, keyboard shortcuts, a usage page, and a quieter chat.
+An [OpenHands](https://www.openhands.dev/) Agent Canvas app that adds a few UI tweaks: agent status in your browser tab and app icon, desktop notifications, unread markers, keyboard shortcuts, and a quieter chat.
 
 ## Features
 
@@ -39,11 +39,6 @@ An [OpenHands](https://www.openhands.dev/) Agent Canvas app that adds a few UI t
 | **Installable app** | Lets your browser install Canvas as an app, with New chat and Settings shortcuts and a title bar in Canvas's colours, clear of notches and home indicators. |
 | **Mobile fixes** | On phones and tablets, keeps the message box above the browser's toolbar, opens the sidebar across the whole screen without conversation previews running off it, shows buttons that otherwise only appear on hover, keeps Canvas's dialogs on screen, scrolling when they're taller, and stops the Automate tabs cutting off their names. |
 
-### Pages
-
-| Name | What it does |
-| :-- | :-- |
-| **Usage page** | Adds a **Usage** page to the sidebar with what your conversations cost today, over 7 or 30 days, or all time, by model and by conversation. |
 
 ## Install
 
@@ -62,7 +57,7 @@ An [OpenHands](https://www.openhands.dev/) Agent Canvas app that adds a few UI t
 Feel free to propose more features in the issue queue.
 
 - The app's source is in [`src/`](src), one module per feature, from [`src/index.js`](src/index.js). Canvas loads an app from one file, so `npm run build` bundles them with Rollup into [`extension.js`](extension.js), which is checked in. `npm test` builds it first, and CI checks it matches `src/`.
-- The settings and usage pages are app pages, which Canvas serves at `/extensions/agent-canvas-app-extras/settings` and `/usage`, as it has no way for an app to add a page under Customize. The app adds the settings page to Customize's menu itself, and hides its own sidebar link.
+- The settings page is an app page, which Canvas serves at `/extensions/agent-canvas-app-extras/settings`, as it has no way for an app to add a page under Customize. The app adds the settings page to Customize's menu itself, and hides its own sidebar link.
 - Canvas has no app API for settings, tab titles or page styles yet. The app works with Canvas's markup directly (its app card, chat, sidebar and title), so an OpenHands update that changes it can break a feature.
 - Settings, runs that ended while you were away, what you've read and the conversation you're looking at are kept in the browser's `localStorage`, under `openhands-extras:settings`, `:unseen`, `:read` and `:viewing`, so they're per browser rather than per backend.
 - While a feature that needs conversation statuses is on, the app asks the Agent Server for them, and for unread markers, in one request when the chat changes, at most every 20 seconds, and every 20 seconds while a run is going or for the counts and unread markers. Nothing is requested while those features are off, and unread markers rest while the tab is hidden.

@@ -32,11 +32,9 @@ import {
   SETTINGS_PAGE,
   settingsPage,
   sidebarLinks,
-  USAGE_PAGE,
   watchCustomizeMenu,
 } from './pages.js';
 import { keyboardShortcuts } from './shortcuts.js';
-import { usagePage } from './usage.js';
 
 // The running copy's dispose, on the page's window. Canvas disposes an app
 // before activating it again; should a copy still be running anyway, the new
@@ -60,10 +58,7 @@ export function activate(host) {
   });
   // Before anything starts, as Canvas throws for a page its copy of the
   // manifest doesn't declare.
-  const unregisterPages = [
-    host.registerPage(SETTINGS_PAGE, settingsView.mount),
-    host.registerPage(USAGE_PAGE, usagePage(host).mount),
-  ];
+  const unregisterSettings = host.registerPage(SETTINGS_PAGE, settingsView.mount);
   // Hiding "Running" and "Reading" pulses on the open conversation's status.
   // The status and unread checks run together, so their loads share one
   // request.
@@ -133,7 +128,7 @@ export function activate(host) {
     observer.disconnect();
     checks.cancel();
     clearTimeout(poll);
-    for (const unregister of unregisterPages) unregister?.();
+    unregisterSettings?.();
     window.removeEventListener('storage', onStorage);
     for (const type of ['pointerdown', 'keydown']) {
       window.removeEventListener(type, onInput, true);
