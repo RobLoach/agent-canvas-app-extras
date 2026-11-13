@@ -481,7 +481,7 @@ const SWITCHES = [
     group: 'App',
     label: 'Mobile fixes',
     description:
-      "Keep Canvas's dialogs within small screens, scrolling when they're taller, and stop the Automate tabs cutting off their names.",
+      "Open the sidebar across the whole screen, keep Canvas's dialogs within small screens, scrolling when they're taller, and stop the Automate tabs cutting off their names.",
   },
   {
     key: 'usagePage',
@@ -1858,7 +1858,9 @@ const WIDE_CANVAS_CSS =
 // centre fixed-width content with no height limit, so on a phone a tall or
 // wide one runs off the screen, out of reach. The Automate pages' tab strip
 // (ManifestSubpageLayout) gives its links equal widths that cut their names
-// off, though it can scroll.
+// off, though it can scroll. The sidebar's drawer takes the screen's full
+// width, closing with its own close button, with its right edge padded like
+// its left.
 const MODAL_FRAME = '[role="dialog"][aria-modal="true"].fixed.inset-0 > .fixed.inset-0 + .relative';
 const MOBILE_FIXES_CSS = `
 @media (max-width: 767px) {
@@ -1868,6 +1870,9 @@ const MOBILE_FIXES_CSS = `
   }
   ${MODAL_FRAME} > * { max-width: 100%; }
   [data-testid$="-navbar-mobile"] > a { flex: none; width: auto; }
+  [data-testid="sidebar-mobile-drawer"] {
+    width: 100%; border-right: none; padding-right: 0.625rem;
+  }
 }`;
 
 // The page's root font size, which Canvas's rem-based sizes follow, from the

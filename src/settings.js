@@ -129,7 +129,7 @@ export const SWITCHES = [
     group: 'App',
     label: 'Mobile fixes',
     description:
-      "Keep Canvas's dialogs within small screens, scrolling when they're taller, and stop the Automate tabs cutting off their names.",
+      "Open the sidebar across the whole screen, keep Canvas's dialogs within small screens, scrolling when they're taller, and stop the Automate tabs cutting off their names.",
   },
   {
     key: 'usagePage',

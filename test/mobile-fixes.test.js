@@ -9,6 +9,7 @@ const BODY = `
     <div class="fixed inset-0 bg-black opacity-60"></div>
     <div id="frame" class="relative"><div id="body" class="w-96"></div></div>
   </div>
+  <aside id="drawer" data-testid="sidebar-mobile-drawer" class="fixed inset-y-0 left-0 z-50 flex w-[min(300px,85vw)] flex-col"></aside>
   <nav data-testid="automations-navbar-mobile" class="lg:hidden flex gap-1 overflow-x-auto"><a id="tab" href="/automations">Dashboard</a></nav>
   <div id="openhands-extras-shortcuts"><div role="dialog" aria-modal="true" class="relative"></div></div>
   <div role="dialog" aria-modal="true" class="fixed inset-0 z-70 flex items-start justify-center px-3">
@@ -30,11 +31,13 @@ test('Mobile fixes are off by default', async (t) => {
   assert.deepEqual(rules(page), []);
 });
 
-test("keeps Canvas's dialogs on screen, and the Automate tabs at their width", async (t) => {
+test("keeps Canvas's dialogs on screen, the Automate tabs at their width, and the sidebar full width", async (t) => {
   const page = setupPage(t, { body: BODY, settings: { mobileFixes: true } });
   await activateExtension(page, fakeHost());
 
-  for (const id of ['frame', 'body', 'tab']) assert.ok(styled(page, id), id);
+  for (const id of ['frame', 'body', 'tab', 'drawer']) assert.ok(styled(page, id), id);
+  const drawer = rules(page).find((rule) => page.document.getElementById('drawer').matches(rule.selectorText));
+  assert.equal(drawer.style.getPropertyValue('width'), '100%');
   assert.ok(!styled(page, 'modal'));
   assert.ok(!styled(page, 'command-menu'), "Canvas's command menu has its own layout");
   assert.match(
