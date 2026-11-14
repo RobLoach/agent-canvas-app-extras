@@ -186,3 +186,34 @@ test("doesn't redraw the sidebar as the chat changes", async (t) => {
 
   assert.equal(searches, 0);
 });
+
+test('keeps asking about the open conversation between the minutes', async (t) => {
+  const { page, host } = await open(t, { path: `/conversations/${dashed(A)}` });
+  host.updated[A] = LATER;
+  await page.wait(10_000);
+
+  assert.equal(host.requests.at(-1), `/api/conversations?ids=${A}`);
+  page.navigate('/apps');
+  await page.check();
+  assert.deepEqual(unread(page), [], 'what you saw is read');
+});
+
+test('asks about them all again after a full check fails', async (t) => {
+  const { page, host } = await open(t);
+  const { request } = host.agentServer;
+  let fail = false;
+  host.agentServer.request = async (options) => {
+    if (fail) {
+      host.requests.push(options.path);
+      throw new Error('Offline');
+    }
+    return request(options);
+  };
+  fail = true;
+  await page.wait(60_000);
+  fail = false;
+  const requests = host.requests.length;
+  await page.wait(10_000);
+
+  assert.deepEqual(host.requests.slice(requests), [`/api/conversations?ids=${A}&ids=${B}`]);
+});

@@ -1131,11 +1131,14 @@ function watchUnread(loadConversations, checks) {
 
   async function check() {
     if (!active || document.hidden) return;
+    // The open conversation is always asked about, so what you saw of it is
+    // up to date when you leave it.
     let keys = [...new Set(sidebarConversations().map(({ key }) => key))];
-    if (Date.now() - allAt >= Math.max(UNREAD_ALL_MS, checkMs())) {
-      allAt = Date.now();
-    } else {
-      keys = keys.filter((key) => !updated.has(key));
+    const startedAt = Date.now();
+    const all = startedAt - allAt >= Math.max(UNREAD_ALL_MS, checkMs());
+    if (!all) {
+      const open = openConversationId();
+      keys = keys.filter((key) => !updated.has(key) || key === open);
     }
     if (keys.length) {
       try {
@@ -1144,6 +1147,8 @@ function watchUnread(loadConversations, checks) {
           const at = Date.parse(info?.updated_at);
           if (!Number.isNaN(at)) updated.set(keys[index], at);
         });
+        // Only a check that got through counts as asking about them all.
+        if (all) allAt = startedAt;
       } catch {
         // Keep the last known times; the next check retries.
       }
@@ -1444,8 +1449,14 @@ function watchCollapseActivity(statusOf) {
       COLLAPSE_STYLE_ID,
       `[${FOLDED_ATTR}]:not([${SHOWN_ATTR}]) { display: none !important; }`,
     );
-    // The chat is only on a conversation's page.
-    if (!openConversationId()) return;
+    // The chat is only on a conversation's page, so let go of the last one's
+    // elements elsewhere.
+    if (!openConversationId()) {
+      chat = null;
+      lastHidden = new Map();
+      placedToggles = new Set();
+      return;
+    }
     const previous = chat;
     chat = find(chat, '[data-testid="chat-scroll-container"]');
     if (!chat || (!chatChanged && chat === previous)) return;
@@ -1499,7 +1510,10 @@ function watchCollapseActivity(statusOf) {
   }
 
   return {
+    // Without records, e.g. as a hidden tab shows again, any item may have
+    // changed, so every one is read again.
     onDomChange(records) {
+      if (!records) readItems = new WeakMap();
       apply(records ? forgetChanged(records) : true);
     },
     refresh: () => apply(),

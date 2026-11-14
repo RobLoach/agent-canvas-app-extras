@@ -245,8 +245,14 @@ export function watchCollapseActivity(statusOf) {
       COLLAPSE_STYLE_ID,
       `[${FOLDED_ATTR}]:not([${SHOWN_ATTR}]) { display: none !important; }`,
     );
-    // The chat is only on a conversation's page.
-    if (!openConversationId()) return;
+    // The chat is only on a conversation's page, so let go of the last one's
+    // elements elsewhere.
+    if (!openConversationId()) {
+      chat = null;
+      lastHidden = new Map();
+      placedToggles = new Set();
+      return;
+    }
     const previous = chat;
     chat = find(chat, '[data-testid="chat-scroll-container"]');
     if (!chat || (!chatChanged && chat === previous)) return;
@@ -300,7 +306,10 @@ export function watchCollapseActivity(statusOf) {
   }
 
   return {
+    // Without records, e.g. as a hidden tab shows again, any item may have
+    // changed, so every one is read again.
     onDomChange(records) {
+      if (!records) readItems = new WeakMap();
       apply(records ? forgetChanged(records) : true);
     },
     refresh: () => apply(),
