@@ -352,3 +352,15 @@ test('waits for a hidden tab to show again before folding new entries', async (t
   await flush();
   assert.deepEqual(shown(page), ['On it.', 'Thinking']);
 });
+
+test('reads again the items that changed while the tab was hidden', async (t) => {
+  const page = openChat(t, [item(message('On it.')), item(message('Next.'))]);
+  await activateExtension(page, fakeHost());
+  page.hidden = true;
+  chat(page).firstElementChild.insertAdjacentHTML('beforeend', row('Running <strong>ls</strong>'));
+  await flush();
+
+  page.returnToTab();
+  await flush();
+  assert.deepEqual(shown(page), ['On it.', 'Thinking', 'Next.']);
+});
