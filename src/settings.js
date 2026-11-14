@@ -27,7 +27,7 @@ export const SWITCHES = [
     key: 'focusedNewChat',
     group: 'Chat',
     label: 'Focused new chat',
-    description: "Hide the new chat page's heading, and put the message box at the top.",
+    description: 'Hide the new chat page\'s "What do you want to work on?" heading and tagline.',
   },
   {
     key: 'collapseActivity',

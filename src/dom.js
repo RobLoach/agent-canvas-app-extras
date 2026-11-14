@@ -2,7 +2,6 @@
 // it borrows from Canvas's own components.
 
 export const THINKING_ATTR = 'data-extras-thinking';
-export const CHIP_LABEL_ATTR = 'data-extras-chip-label';
 export const UNREAD_ATTR = 'data-extras-unread';
 
 // Marks other elements this app adds to the page body.
@@ -63,7 +62,7 @@ export const pageSection = (title, ...children) =>
   el('section', 'flex min-w-0 flex-col gap-3', el('h3', 'text-base font-semibold text-foreground', title), ...children);
 
 // The elements this app adds to Canvas's page body.
-const OWN_SELECTOR = `[${OWN_ATTR}], [${THINKING_ATTR}], [${CHIP_LABEL_ATTR}], [${UNREAD_ATTR}]`;
+const OWN_SELECTOR = `[${OWN_ATTR}], [${THINKING_ATTR}], [${UNREAD_ATTR}]`;
 const ownNode = (node) => node.nodeType === Node.ELEMENT_NODE && node.matches(OWN_SELECTOR);
 export const ownChange = (record) =>
   !!record.target.closest?.(OWN_SELECTOR) ||

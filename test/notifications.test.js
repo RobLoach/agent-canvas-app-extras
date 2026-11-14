@@ -60,7 +60,7 @@ test('notifies when the window is visible but not focused', async (t) => {
 
   assert.deepEqual(
     page.notifications.map((notification) => notification.options.body),
-    ['Needs your confirmation'],
+    ['Do you want to continue with this action?'],
   );
 });
 
@@ -324,8 +324,7 @@ test("says the status in Canvas's language", async (t) => {
     return {
       ok: true,
       json: async () => ({
-        CHAT_INTERFACE$AGENT_AWAITING_USER_CONFIRMATION_MESSAGE:
-          'Agent wartet auf die Bestätigung des Benutzers für die ausstehende Aktion.',
+        CHAT_INTERFACE$USER_ASK_CONFIRMATION: 'Möchten Sie mit dieser Aktion fortfahren?',
       }),
     };
   };
@@ -337,7 +336,7 @@ test("says the status in Canvas's language", async (t) => {
   assert.deepEqual(
     page.notifications.map((notification) => notification.options.body),
     [
-      'Agent wartet auf die Bestätigung des Benutzers für die ausstehende Aktion.',
+      'Möchten Sie mit dieser Aktion fortfahren?',
       // Untranslated, it stays English.
       'Got stuck',
     ],

@@ -11,8 +11,8 @@ export const STATUS_BADGES = {
   waiting_for_confirmation: {
     emoji: '✋',
     color: '#f59e0b',
-    label: 'Needs your confirmation',
-    key: 'CHAT_INTERFACE$AGENT_AWAITING_USER_CONFIRMATION_MESSAGE',
+    label: 'Do you want to continue with this action?',
+    key: 'CHAT_INTERFACE$USER_ASK_CONFIRMATION',
   },
   paused: { emoji: '⏸️', color: '#9ca3af', label: 'Paused', key: 'COMMON$PAUSED' },
   finished: { emoji: '✅', color: '#22c55e', label: 'Finished', key: 'COMMON$FINISHED' },
