@@ -70,14 +70,14 @@ describe('Focused new chat', () => {
     assert.deepEqual(rules(page), []);
   });
 
-  test('hides the heading and tagline, and starts the page at the top', async (t) => {
+  test("hides the heading and tagline, leaving the page's layout as Canvas has it", async (t) => {
     const page = setupPage(t, { body: BODY, settings: { focusedNewChat: true } });
     const dispose = await activateExtension(page, fakeHost());
 
     assert.equal(ruleFor(page, 'home-title').style.display, 'none');
-    for (const id of ['home-toggle', 'home-input']) assert.equal(ruleFor(page, id), undefined, id);
-    assert.equal(ruleFor(page, 'home').style.paddingTop, '2rem');
-    assert.equal(ruleFor(page, 'starting'), undefined, 'not while a chat starts');
+    for (const id of ['home', 'starting', 'home-toggle', 'home-input']) {
+      assert.equal(ruleFor(page, id), undefined, id);
+    }
 
     dispose();
     assert.deepEqual(rules(page), []);

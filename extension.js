@@ -3,7 +3,6 @@
 // it borrows from Canvas's own components.
 
 const THINKING_ATTR = 'data-extras-thinking';
-const CHIP_LABEL_ATTR = 'data-extras-chip-label';
 const UNREAD_ATTR = 'data-extras-unread';
 
 // Marks other elements this app adds to the page body.
@@ -64,7 +63,7 @@ const pageSection = (title, ...children) =>
   el('section', 'flex min-w-0 flex-col gap-3', el('h3', 'text-base font-semibold text-foreground', title), ...children);
 
 // The elements this app adds to Canvas's page body.
-const OWN_SELECTOR = `[${OWN_ATTR}], [${THINKING_ATTR}], [${CHIP_LABEL_ATTR}], [${UNREAD_ATTR}]`;
+const OWN_SELECTOR = `[${OWN_ATTR}], [${THINKING_ATTR}], [${UNREAD_ATTR}]`;
 const ownNode = (node) => node.nodeType === Node.ELEMENT_NODE && node.matches(OWN_SELECTOR);
 const ownChange = (record) =>
   !!record.target.closest?.(OWN_SELECTOR) ||
@@ -260,8 +259,8 @@ const STATUS_BADGES = {
   waiting_for_confirmation: {
     emoji: '✋',
     color: '#f59e0b',
-    label: 'Needs your confirmation',
-    key: 'CHAT_INTERFACE$AGENT_AWAITING_USER_CONFIRMATION_MESSAGE',
+    label: 'Do you want to continue with this action?',
+    key: 'CHAT_INTERFACE$USER_ASK_CONFIRMATION',
   },
   paused: { emoji: '⏸️', color: '#9ca3af', label: 'Paused', key: 'COMMON$PAUSED' },
   finished: { emoji: '✅', color: '#22c55e', label: 'Finished', key: 'COMMON$FINISHED' },
@@ -373,7 +372,7 @@ const SWITCHES = [
     key: 'focusedNewChat',
     group: 'Chat',
     label: 'Focused new chat',
-    description: "Hide the new chat page's heading, and put the message box at the top.",
+    description: 'Hide the new chat page\'s "What do you want to work on?" heading and tagline.',
   },
   {
     key: 'collapseActivity',
@@ -1229,12 +1228,10 @@ const EVENT_TITLE = '[data-testid="generic-event-message-title"]';
 // until its translations for the page's language load.
 const FOLD_LABELS = {
   ACTION_MESSAGE$RUN: 'Running <cmd>{{command}}</cmd>',
-  ACTION_MESSAGE$RUN_IPYTHON: 'Running a Python command',
   ACTION_MESSAGE$READ: 'Reading <path>{{path}}</path>',
   ACTION_MESSAGE$ACP_RUN: 'Running <cmd>{{title}}</cmd>',
   ACTION_MESSAGE$ACP_READ: 'Reading <cmd>{{title}}</cmd>',
   OBSERVATION_MESSAGE$RUN: 'Ran <cmd>{{command}}</cmd>',
-  OBSERVATION_MESSAGE$RUN_IPYTHON: 'Ran a Python command',
   OBSERVATION_MESSAGE$READ: 'Read <path>{{path}}</path>',
 };
 const THINKING_KEY = 'THINKING$TITLE';
@@ -1328,11 +1325,9 @@ function watchCollapseActivity(statusOf) {
   let toggles = new WeakMap();
   // Whether the last stretch pulses, for the open conversation running.
   let pulsing = false;
-  // The chat and activity chip, found again only once Canvas replaces them,
-  // and whether each row is one to fold, by row: a row's title doesn't
+  // The chat, found again only once Canvas replaces it, and whether each row is one to fold, by row: a row's title doesn't
   // change once Canvas renders it.
   let chat = null;
-  let chip = null;
   let foldRows = new WeakMap();
   // Each chat item as last read, read again only once it changes, so a
   // streaming run doesn't rescan the whole chat on every update.
@@ -1358,7 +1353,7 @@ function watchCollapseActivity(statusOf) {
       element.removeAttribute(SHOWN_ATTR);
     }
     for (const ours of document.querySelectorAll(
-      `[${THINKING_ATTR}], [${CHIP_LABEL_ATTR}]`,
+      `[${THINKING_ATTR}]`,
     )) {
       ours.remove();
     }
@@ -1439,29 +1434,7 @@ function watchCollapseActivity(statusOf) {
     return found;
   }
 
-  // The live activity chip above the message box says "Running …" too: show
-  // "Thinking" in a label of ours beside Canvas's, which React keeps updating.
-  function relabelChip() {
-    chip = find(chip, '[data-testid="live-activity-chip"]');
-    if (!chip) return;
-    let ours = chip.querySelector(`:scope > [${CHIP_LABEL_ATTR}]`);
-    const label = [...chip.children].findLast((child) => child !== ours);
-    const foldable = !!label && labels.title.test(label.textContent.trim());
-    if (label) toggleAttr(label, FOLDED_ATTR, foldable);
-    if (!foldable) {
-      ours?.remove();
-      return;
-    }
-    if (!ours) {
-      ours = document.createElement('span');
-      ours.className = label.className;
-      ours.setAttribute(CHIP_LABEL_ATTR, '');
-    }
-    setProperty(ours, 'textContent', labels.thinking);
-    if (label.nextElementSibling !== ours) label.after(ours);
-  }
-
-  // Changes outside the chat only touch the chip, unless the chat itself is
+  // Changes outside the chat change nothing, unless the chat itself is
   // replaced; everything else reads the chat again.
   function apply(chatChanged = true) {
     if (disposed) return;
@@ -1476,16 +1449,14 @@ function watchCollapseActivity(statusOf) {
       COLLAPSE_STYLE_ID,
       `[${FOLDED_ATTR}]:not([${SHOWN_ATTR}]) { display: none !important; }`,
     );
-    // The chat and its activity chip are only on a conversation's page, so
-    // let go of the last one's elements elsewhere.
+    // The chat is only on a conversation's page, so let go of the last one's
+    // elements elsewhere.
     if (!openConversationId()) {
       chat = null;
-      chip = null;
       lastHidden = new Map();
       placedToggles = new Set();
       return;
     }
-    relabelChip();
     const previous = chat;
     chat = find(chat, '[data-testid="chat-scroll-container"]');
     if (!chat || (!chatChanged && chat === previous)) return;
@@ -1960,11 +1931,9 @@ const WIDE_CHAT_CSS =
   '[data-agent-server-ui] .max-w-200.h-full.min-h-0 { max-width: none; }';
 
 // The new chat page (HomeChatLauncher) puts its heading and tagline
-// (HomeHeaderTitle) above the message box, and starts 28% of the way down
-// the page, or further while a new chat starts.
+// (HomeHeaderTitle) above the message box, which stays where Canvas puts it.
 const FOCUSED_NEW_CHAT_CSS = `
-[data-testid="home-chat-launcher"] div:has(> div > [data-testid="home-header-subtitle"]) { display: none; }
-[data-testid="home-chat-launcher"]:not(.h-full) { padding-top: 2rem; }`;
+[data-testid="home-chat-launcher"] div:has(> div > [data-testid="home-header-subtitle"]) { display: none; }`;
 
 // Canvas's dialogs (ModalBackdrop: a fixed backdrop, then the content)
 // centre fixed-width content with no height limit, so on a phone a tall or

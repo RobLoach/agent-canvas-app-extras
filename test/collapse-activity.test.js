@@ -38,7 +38,7 @@ test('folds Running and Reading entries into Thinking, keeping the rest', async 
     item(message('Let me check the tests.'), row('Running <strong>npm test</strong>')),
     item(row('Ran <strong>npm test</strong>')),
     item(row('Running <strong>sleep 999</strong>', TIMEOUT)),
-    item(row('Running a Python command')),
+    item(row('Reading <code>a.js</code>')),
     item(message('All done.')),
   ]);
   await activateExtension(page, fakeHost());
@@ -186,36 +186,6 @@ test('a second copy of the app stops the first, rather than fighting it', async 
   second();
   second();
   assert.equal(toggles(page).length, 0);
-});
-
-test('says Thinking on the activity chip while it shows a folded title', async (t) => {
-  const page = openChat(t, [item(message('On it.'))]);
-  page.document.body.insertAdjacentHTML(
-    'beforeend',
-    '<div data-testid="live-activity-chip" role="status"><span aria-hidden="true" class="size-1.5"></span><span class="min-w-0 truncate">Running <strong>ls</strong></span></div>',
-  );
-  await activateExtension(page, fakeHost());
-  const chip = page.document.querySelector('[data-testid="live-activity-chip"]');
-  const canvasLabel = chip.children[1];
-  const visible = () =>
-    [...chip.children]
-      .filter((child) => !child.matches('[data-extras-folded]'))
-      .map((child) => child.textContent)
-      .join('|');
-  assert.equal(visible(), '|Thinking');
-  assert.equal(chip.lastElementChild.className, 'min-w-0 truncate');
-
-  // React updates its own label, which shows again for anything else.
-  canvasLabel.innerHTML = 'Editing <code>a.js</code>';
-  await flush();
-  assert.equal(visible(), '|Editing a.js');
-
-  canvasLabel.innerHTML = 'Reading <code>b.js</code>';
-  await flush();
-  assert.equal(visible(), '|Thinking');
-
-  await page.changeSettings({});
-  assert.equal(visible(), '|Reading b.js');
 });
 
 test('a translation that arrives after disabling changes nothing', async (t) => {
