@@ -87,12 +87,11 @@ test('keeps a voice this device does not have', async (t) => {
   assert.equal(page.document.querySelector('[data-testid="extras-voice-select"]').value, 'Karen');
 });
 
-test('saves the voice and previews it', async (t) => {
+test('saves the voice and previews it as soon as it is picked', async (t) => {
   const page = await settingsPage(t);
   const select = page.document.querySelector('[data-testid="extras-voice-select"]');
   select.value = 'Daniel';
   select.dispatchEvent(new page.window.Event('change'));
-  page.document.querySelector('[data-testid="extras-voice-preview"]').click();
 
   assert.equal(
     JSON.parse(page.window.localStorage.getItem('openhands-extras:settings')).voice,
@@ -100,6 +99,13 @@ test('saves the voice and previews it', async (t) => {
   );
   assert.deepEqual(page.utterances, ['Hello, my name is Daniel and I am an English voice.']);
   assert.equal(page.spoken[0].voice, DANIEL);
+});
+
+test('Preview reads the picked voice again', async (t) => {
+  const page = await settingsPage(t, { voice: 'Daniel' });
+  page.document.querySelector('[data-testid="extras-voice-preview"]').click();
+
+  assert.deepEqual(page.utterances, ['Hello, my name is Daniel and I am an English voice.']);
 });
 
 test('reads with the best rated voice by default', async (t) => {

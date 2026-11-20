@@ -60,8 +60,8 @@ function buildChoice(item, onChange) {
 }
 
 // The browser's voices as a dropdown, with Automatic first and a saved voice
-// this device doesn't have kept as it is, and a button to hear the one
-// picked.
+// this device doesn't have kept as it is. Picking one reads a sample in it,
+// as does the button beside it.
 function buildVoiceChoice(item, onChange) {
   const id = `extras-${item.key}`;
   const option = (value, text) => {
@@ -88,7 +88,10 @@ function buildVoiceChoice(item, onChange) {
   select.dataset.testid = `${id}-select`;
   select.value = settings.voice;
   select.setAttribute('aria-describedby', `${id}-hint`);
-  select.addEventListener('change', () => onChange({ ...settings, [item.key]: select.value }));
+  select.addEventListener('change', () => {
+    onChange({ ...settings, [item.key]: select.value });
+    previewVoice(select.value);
+  });
   const label = el('label', 'w-fit text-sm', item.label);
   label.htmlFor = id;
   const hint = el('p', 'text-xs leading-relaxed text-tertiary-light', item.description);
