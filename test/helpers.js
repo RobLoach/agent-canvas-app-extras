@@ -49,6 +49,10 @@ export function setupPage(
     // What the app read aloud, still reading or done, and the mic's level
     // and open streams, for Voice chat and Hands-free.
     utterances: [],
+    // The utterances themselves, with their voice and rate, and the
+    // browser's voices.
+    spoken: [],
+    voices: [],
     micLevel: 0,
     micStreams: 0,
     micAnswer: true,
@@ -140,8 +144,13 @@ export function setupPage(
       return this.queue.length > 0;
     },
     pending: false,
+    getVoices: () => page.voices,
+    addEventListener: (type, listener) => window.addEventListener(`speech-${type}`, listener),
+    removeEventListener: (type, listener) =>
+      window.removeEventListener(`speech-${type}`, listener),
     speak(utterance) {
       page.utterances.push(utterance.text);
+      page.spoken.push(utterance);
       this.queue.push(utterance);
     },
     cancel() {
@@ -249,6 +258,12 @@ export function setupPage(
       page.focused = true;
       window.document.dispatchEvent(new window.Event('visibilitychange'));
       window.dispatchEvent(new window.Event('focus'));
+    },
+    // The browser finds its voices.
+    async setVoices(voices) {
+      page.voices = voices;
+      window.dispatchEvent(new window.Event('speech-voiceschanged'));
+      await flush();
     },
     async finishSpeaking() {
       const queue = window.speechSynthesis.queue;

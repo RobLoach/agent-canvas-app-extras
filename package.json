@@ -5,7 +5,8 @@
   "scripts": {
     "build": "rollup -c",
     "pretest": "npm run build",
-    "test": "node --test \"test/*.test.js\""
+    "test": "node --test \"test/*.test.js\"",
+    "voices": "node scripts/voices.js"
   },
   "devDependencies": {
     "jsdom": "^29.1.1",

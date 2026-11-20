@@ -15,6 +15,7 @@ import { canvasBase } from './canvas.js';
 import { STORAGE_KEY } from './storage.js';
 import { settings, SWITCH_GROUPS, SWITCHES } from './settings.js';
 import { showShortcuts } from './shortcuts.js';
+import { previewVoice, voiceGroups } from './speech.js';
 
 // Class strings mirror Canvas's ToggleSwitchVisual (src/ui/toggle-switch.tsx)
 // so the switch picks up the same compiled Tailwind styles. The checkbox it
@@ -56,6 +57,50 @@ function buildChoice(item, onChange) {
   const hint = el('p', 'text-xs leading-relaxed text-tertiary-light', item.description);
   hint.id = `${id}-hint`;
   return el('div', 'flex min-w-0 flex-col gap-2', label, select, hint);
+}
+
+// The browser's voices as a dropdown, with Automatic first and a saved voice
+// this device doesn't have kept as it is, and a button to hear the one
+// picked.
+function buildVoiceChoice(item, onChange) {
+  const id = `extras-${item.key}`;
+  const option = (value, text) => {
+    const element = el('option', '', text);
+    element.value = value;
+    return element;
+  };
+  const groups = voiceGroups();
+  const known = groups.some(([, voices]) => voices.some(([name]) => name === settings.voice));
+  const select = el(
+    'select',
+    SELECT_CLASS,
+    option('', 'Automatic (best available)'),
+    ...(settings.voice && !known
+      ? [option(settings.voice, `${settings.voice} (not on this device)`)]
+      : []),
+    ...groups.map(([group, voices]) => {
+      const optgroup = el('optgroup', '', ...voices.map(([name, text]) => option(name, text)));
+      optgroup.label = group;
+      return optgroup;
+    }),
+  );
+  select.id = id;
+  select.dataset.testid = `${id}-select`;
+  select.value = settings.voice;
+  select.setAttribute('aria-describedby', `${id}-hint`);
+  select.addEventListener('change', () => onChange({ ...settings, [item.key]: select.value }));
+  const label = el('label', 'w-fit text-sm', item.label);
+  label.htmlFor = id;
+  const hint = el('p', 'text-xs leading-relaxed text-tertiary-light', item.description);
+  hint.id = `${id}-hint`;
+  const preview = textButton('extras-voice-preview', 'Preview', () => previewVoice(select.value));
+  return el(
+    'div',
+    'flex min-w-0 flex-col gap-2',
+    label,
+    el('div', 'flex min-w-0 items-center gap-3', select, preview),
+    hint,
+  );
 }
 
 function buildSwitch(item, onChange) {
@@ -230,7 +275,7 @@ export function settingsPage(host, onChange) {
       pageSection(
         group,
         ...SWITCHES.filter((item) => item.group === group).map((item) =>
-          (item.options ? buildChoice : buildSwitch)(item, change),
+          (item.voices ? buildVoiceChoice : item.options ? buildChoice : buildSwitch)(item, change),
         ),
         ...(group === 'Chat' ? [showShortcutsButton] : []),
       ),
@@ -292,9 +337,15 @@ export function settingsPage(host, onChange) {
     list = own;
     render();
     container.append(root);
+    // Browsers find their voices after the page loads, Chrome especially.
+    const onVoices = () => {
+      if (list === own) render();
+    };
+    window.speechSynthesis?.addEventListener?.('voiceschanged', onVoices);
     // Canvas may clean up a mount after the next one has started.
     return () => {
       if (list === own) list = null;
+      window.speechSynthesis?.removeEventListener?.('voiceschanged', onVoices);
       root.remove();
     };
   }

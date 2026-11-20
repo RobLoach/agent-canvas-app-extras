@@ -9,9 +9,10 @@ import {
 } from './notifications.js';
 
 // A switch with options is a choice between them instead, starting at its
-// default. check() says why a switch can't work, e.g. after a permission was
-// revoked; enable(), which defaults to check(), may also ask the browser for
-// what it needs.
+// default, and one with voices a choice of the browser's voices, by name.
+// check() says why a switch can't work, e.g. after a permission was revoked;
+// enable(), which defaults to check(), may also ask the browser for what it
+// needs.
 // status is 'follow' for a feature that needs conversation statuses, and
 // 'count' for one that also needs how many conversations need your input.
 // The settings page lists them under their group, in this order.
@@ -62,6 +63,31 @@ export const SWITCHES = [
     label: 'Hands-free',
     description: 'Stop the mic once you stop talking, so you never have to tap it.',
     enable: requestMic,
+  },
+  {
+    key: 'voice',
+    group: 'Voice',
+    label: 'Voice',
+    description:
+      "Which of your browser's English voices reads aloud. Voices marked online send what they read to Google or Microsoft.",
+    voices: true,
+    default: '',
+  },
+  {
+    key: 'readingSpeed',
+    group: 'Voice',
+    label: 'Reading speed',
+    description: 'How fast replies and messages are read.',
+    // Choices as [value, label, the speech rate].
+    options: [
+      ['0.75', '0.75×', 0.75],
+      ['1', '1×', 1],
+      ['1.25', '1.25×', 1.25],
+      ['1.5', '1.5×', 1.5],
+      ['1.75', '1.75×', 1.75],
+      ['2', '2×', 2],
+    ],
+    default: '1',
   },
   {
     key: 'readAloud',
@@ -169,7 +195,7 @@ export const SWITCHES = [
   },
 ];
 const DEFAULT_SETTINGS = Object.fromEntries(
-  SWITCHES.map((item) => [item.key, item.options ? item.default : false]),
+  SWITCHES.map((item) => [item.key, item.default ?? false]),
 );
 
 export let settings = DEFAULT_SETTINGS;
@@ -183,7 +209,7 @@ export function loadSettings() {
       const value = stored?.[item.key];
       const valid = item.options
         ? item.options.some(([option]) => option === value)
-        : typeof value === 'boolean';
+        : typeof value === (item.voices ? 'string' : 'boolean');
       return [item.key, valid ? value : DEFAULT_SETTINGS[item.key]];
     }),
   );

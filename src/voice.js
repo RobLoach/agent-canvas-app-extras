@@ -8,6 +8,7 @@ import { canvasLanguage, openConversationId } from './canvas.js';
 import { ACTIVE_STATUSES } from './statuses.js';
 import { plainText } from './notifications.js';
 import { settings } from './settings.js';
+import { read } from './speech.js';
 
 // Canvas's mic, which says it's recording with aria-pressed and starting or
 // transcribing with aria-busy, and puts what you said in the message box.
@@ -116,19 +117,6 @@ function messageSentences(article) {
     block.append('\n');
   }
   return copy.textContent.split(/\n+/).flatMap((line) => sentencesOf(line.replace(/\s+/g, ' ')));
-}
-
-// Queues the sentences to be read, then runs onDone once the last is.
-// Cancelling the queue skips onDone.
-function read(sentences, onDone) {
-  const synth = window.speechSynthesis;
-  synth.cancel();
-  sentences.forEach((sentence, index) => {
-    const utterance = new window.SpeechSynthesisUtterance(sentence);
-    utterance.lang = canvasLanguage();
-    if (index === sentences.length - 1) utterance.onend = onDone;
-    synth.speak(utterance);
-  });
 }
 
 // Stops the mic after you stop talking, from its level on a second stream:
