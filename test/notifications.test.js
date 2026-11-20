@@ -152,19 +152,46 @@ test('unlocks the chime on the first click or key press after a reload', async (
   assert.equal(contexts, 1);
 });
 
+const VIEWING = 'openhands-extras:viewing';
+const viewing = (page) => JSON.parse(page.window.localStorage.getItem(VIEWING));
+// Another window shows the conversation, as of when.
+const viewElsewhere = (page, id, at = Date.now()) =>
+  page.window.localStorage.setItem(VIEWING, JSON.stringify({ id, at }));
+
 test('leaves a run to the window you are watching it in', async (t) => {
   const { page, host } = await watchRun(t);
-  const viewing = () => page.window.localStorage.getItem('openhands-extras:viewing');
-  assert.equal(viewing(), JSON.stringify(A));
+  assert.deepEqual(viewing(page), { id: A, at: Date.now() });
 
   page.hidden = true;
   page.window.document.dispatchEvent(new page.window.Event('visibilitychange'));
-  assert.equal(viewing(), null);
+  assert.equal(viewing(page), null);
 
-  // Another window shows it.
-  page.window.localStorage.setItem('openhands-extras:viewing', JSON.stringify(A));
+  viewElsewhere(page, A);
   await finish(page, host);
   assert.equal(page.notifications.length, 0);
+});
+
+test('keeps sharing the run you are watching while checks go on', async (t) => {
+  const { page } = await watchRun(t);
+  await page.wait(60000);
+  await page.check();
+  assert.deepEqual(viewing(page), { id: A, at: Date.now() });
+});
+
+test('stops sharing the run you are watching when the page goes away', async (t) => {
+  const { page } = await watchRun(t);
+  page.window.dispatchEvent(new page.window.Event('pagehide'));
+  assert.equal(viewing(page), null);
+});
+
+test('notifies about a run another window stopped sharing a while ago', async (t) => {
+  const { page, host } = await watchRun(t);
+  page.hidden = true;
+  page.window.document.dispatchEvent(new page.window.Event('visibilitychange'));
+  // That window crashed a minute ago, so never cleared it.
+  viewElsewhere(page, A, Date.now() - 60000);
+  await finish(page, host);
+  assert.equal(page.notifications.length, 1);
 });
 
 test('does not chime while you are watching or when a run finishes', async (t) => {

@@ -257,7 +257,7 @@ export function watchAgentStatus(host, loadConversations, checks, onRender) {
       previous !== next &&
       entry.sawActive &&
       (id !== openId || away()) &&
-      readJson(VIEWING_KEY, null) !== id;
+      !viewingElsewhere(id);
     if (!changedWhileAway) return waitingChanged;
     if (counting() && ENDED_STATUSES.has(next)) unseenRuns.mark(id, true);
     if (settings.notifications && NOTIFY_STATUSES.has(next)) {
@@ -351,13 +351,20 @@ export function watchAgentStatus(host, loadConversations, checks, onRender) {
     counting() || [...conversations.values()].some((entry) => ACTIVE_STATUSES.has(entry.status));
 
   // The conversation this window shows while it has focus, shared so other
-  // windows following it don't notify you about it.
+  // windows following it don't notify you about it. Each check refreshes it,
+  // and other windows ignore it once it's a few checks old, in case this tab
+  // crashed. Blur and leaving the page stop sharing it.
   let shared = null;
-  function shareViewing() {
-    const id = !disposed && watching() && !away() ? openId : null;
-    if (id === shared) return;
-    if (id || readJson(VIEWING_KEY, null) === shared) writeJson(VIEWING_KEY, id);
+  function shareViewing(leaving = false) {
+    const id = !leaving && !disposed && watching() && !away() ? openId : null;
+    if (id) writeJson(VIEWING_KEY, { id, at: Date.now() });
+    else if (shared && readJson(VIEWING_KEY, null)?.id === shared) writeJson(VIEWING_KEY, null);
     shared = id;
+  }
+  const stopViewing = () => shareViewing(true);
+  function viewingElsewhere(id) {
+    const viewing = readJson(VIEWING_KEY, null);
+    return viewing?.id === id && Date.now() - viewing.at < 3 * checkMs();
   }
 
   // Coming back to the tab or window clears the badges of ended or paused runs.
@@ -387,7 +394,8 @@ export function watchAgentStatus(host, loadConversations, checks, onRender) {
   });
   document.addEventListener('visibilitychange', onReturn);
   window.addEventListener('focus', onReturn);
-  window.addEventListener('blur', shareViewing);
+  window.addEventListener('blur', stopViewing);
+  window.addEventListener('pagehide', stopViewing);
 
   return {
     check,
@@ -423,7 +431,8 @@ export function watchAgentStatus(host, loadConversations, checks, onRender) {
       headObserver.disconnect();
       document.removeEventListener('visibilitychange', onReturn);
       window.removeEventListener('focus', onReturn);
-      window.removeEventListener('blur', shareViewing);
+      window.removeEventListener('blur', stopViewing);
+      window.removeEventListener('pagehide', stopViewing);
       shareViewing();
       openId = null;
       conversations.clear();
