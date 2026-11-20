@@ -207,3 +207,12 @@ test("Hands-free stays off when the mic's blocked", async (t) => {
     /mic is blocked/,
   );
 });
+
+test("reads the reply in one go when Canvas's language isn't one the browser knows", async (t) => {
+  const { page, host } = await voiceChat(t);
+  page.document.documentElement.lang = 'not a language';
+  await say(page, 'Run the tests');
+  await reply(page, host);
+
+  assert.deepEqual(page.utterances, ['Done. All tests pass.']);
+});

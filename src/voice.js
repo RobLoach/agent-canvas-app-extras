@@ -61,10 +61,14 @@ export function spokenSentences(markdown) {
     markdown.replace(/```[\s\S]*?(?:```|$)/g, ' The code is in the chat. '),
     MAX_SPOKEN,
   );
-  const sentences = new Intl.Segmenter(canvasLanguage(), { granularity: 'sentence' });
-  return [...sentences.segment(text)]
-    .map(({ segment }) => segment.trim())
-    .filter(Boolean);
+  let segments;
+  try {
+    segments = [...new Intl.Segmenter(canvasLanguage(), { granularity: 'sentence' }).segment(text)];
+  } catch {
+    // A language tag the browser doesn't know: read it in one go.
+    segments = [{ segment: text }];
+  }
+  return segments.map(({ segment }) => segment.trim()).filter(Boolean);
 }
 
 // Stops the mic after you stop talking, from its level on a second stream:
@@ -139,21 +143,22 @@ function silenceDetector(onSilence) {
 
 // A turn goes listening → sending → waiting → speaking, then listens again
 // by pressing the mic. Pressing a key, leaving the conversation or turning
-// Voice chat off ends it.
+// Voice chat off ends it. Each step that waits checks the turn is still the
+// current one after.
 export function voiceChat(host, loadConversations) {
-  let state = 'idle';
-  let wasPressed = false;
-  // The conversation the turn is in, null on a new chat until Canvas opens
-  // it, and its last message from you when the turn started.
+  // The turn: its stage, the conversation it's in, null on a new chat until
+  // Canvas opens it, your last message there when it started, and whether
+  // the run answering you was seen going.
   let turn = null;
+  let wasPressed = false;
   let timer = 0;
   let stopDetector = null;
   let unlocked = false;
 
   const on = () => settings.voiceChat || settings.handsFree;
+  const at = (stage) => turn?.stage === stage;
 
   function end() {
-    state = 'idle';
     turn = null;
     clearTimeout(timer);
     timer = 0;
@@ -178,40 +183,34 @@ export function voiceChat(host, loadConversations) {
     if (!settings.voiceChat) return;
     // Pressing the mic while the reply is read talks over it.
     end();
-    state = 'listening';
     const id = openConversationId();
-    const current = { id, baseline: undefined };
+    const current = { stage: 'listening', id, baseline: id ? undefined : null, sawActive: false };
     turn = current;
-    if (id) {
-      loadConversations([id])
-        .then(([info]) => {
-          current.baseline = info?.last_user_message_id ?? null;
-        })
-        // Without it, there's no telling the reply from the last one.
-        .catch(() => {
-          if (turn === current) end();
-        });
-    } else {
-      current.baseline = null;
-    }
+    if (!id) return;
+    loadConversations([id])
+      .then(([info]) => {
+        current.baseline = info?.last_user_message_id ?? null;
+      })
+      // Without it, there's no telling the reply from the last one.
+      .catch(() => {
+        if (turn === current) end();
+      });
   }
 
   // Once what you said is in the message box, send it.
   function onStopped() {
     stopListening();
-    if (state !== 'listening') return;
-    state = 'sending';
+    if (!at('listening')) return;
+    turn.stage = 'sending';
     const started = Date.now();
     const trySend = () => {
-      if (state !== 'sending') return;
       const mic = findMic();
       const composer = document.querySelector(COMPOSER);
       const send = sendButton(mic);
       const waited = Date.now() - started;
       if (composer?.textContent.trim() && send && !send.disabled && !busy(mic)) {
         send.click();
-        state = 'waiting';
-        turn.sawActive = false;
+        turn.stage = 'waiting';
         timer = setTimeout(checkReply, REPLY_CHECK_MS);
       } else if (waited < (busy(mic) ? TRANSCRIBE_TIMEOUT_MS : SEND_TIMEOUT_MS)) {
         timer = setTimeout(trySend, SEND_CHECK_MS);
@@ -226,27 +225,23 @@ export function voiceChat(host, loadConversations) {
   // the run was seen going, or the agent has added to the conversation since
   // your message.
   async function checkReply() {
-    if (state !== 'waiting') return;
     const current = turn;
     current.id ??= openConversationId();
-    if (!current.id) {
-      timer = setTimeout(checkReply, REPLY_CHECK_MS);
-      return;
-    }
-    const info = await loadConversations([current.id])
-      .then(([result]) => result)
-      .catch(() => null);
-    if (state !== 'waiting' || turn !== current) return;
+    const info = current.id
+      ? await loadConversations([current.id])
+          .then(([result]) => result)
+          .catch(() => null)
+      : null;
+    if (turn !== current) return;
     const status = info?.execution_status;
     const message = info?.last_user_message_id;
-    const answered = message && current.baseline !== undefined && message !== current.baseline;
-    if (answered && ACTIVE_STATUSES.has(status)) current.sawActive = true;
-    const done =
-      answered &&
-      (status === 'waiting_for_confirmation' ||
-        (!ACTIVE_STATUSES.has(status) &&
-          (current.sawActive || (info.leaf_event_id && info.leaf_event_id !== message))));
-    if (!done) {
+    const answered =
+      !!message && current.baseline !== undefined && message !== current.baseline;
+    const running = ACTIVE_STATUSES.has(status);
+    if (answered && running) current.sawActive = true;
+    const agentActed = !!info?.leaf_event_id && info.leaf_event_id !== message;
+    const needsYou = status === 'waiting_for_confirmation';
+    if (!answered || (running && !needsYou) || (!running && !current.sawActive && !agentActed)) {
       timer = setTimeout(checkReply, REPLY_CHECK_MS);
       return;
     }
@@ -254,7 +249,7 @@ export function voiceChat(host, loadConversations) {
       const result = await host.agentServer
         .request({ path: `/api/conversations/${current.id}/agent_final_response` })
         .catch(() => null);
-      if (state !== 'waiting' || turn !== current) return;
+      if (turn !== current) return;
       speak(spokenSentences(result?.response ?? ''), true);
     } else if (SAY[status]) {
       speak([SAY[status]], false);
@@ -271,8 +266,8 @@ export function voiceChat(host, loadConversations) {
       done();
       return;
     }
-    state = 'speaking';
     const current = turn;
+    current.stage = 'speaking';
     const synth = window.speechSynthesis;
     synth.cancel();
     sentences.forEach((sentence, index) => {
@@ -280,7 +275,7 @@ export function voiceChat(host, loadConversations) {
       utterance.lang = canvasLanguage();
       if (index === sentences.length - 1) {
         utterance.onend = () => {
-          if (state === 'speaking' && turn === current) done();
+          if (turn === current) done();
         };
       }
       synth.speak(utterance);
@@ -307,21 +302,20 @@ export function voiceChat(host, loadConversations) {
   // A key press ends the turn, unless it's while you're talking, as dictation
   // takes keys too.
   function onKeyDown(event) {
-    if (state === 'idle' || state === 'listening' || state === 'sending') return;
+    if (!at('waiting') && !at('speaking')) return;
     if (['Shift', 'Control', 'Alt', 'Meta'].includes(event.key)) return;
     end();
   }
 
   function onMicChange() {
-    const mic = findMic();
-    const now = pressed(mic);
+    const now = pressed(findMic());
     if (now !== wasPressed) {
       wasPressed = now;
       if (now) onListen();
       else onStopped();
     }
     // Leaving the conversation ends its turn.
-    if (turn?.id && state !== 'idle' && openConversationId() !== turn.id) end();
+    if (turn?.id && openConversationId() !== turn.id) end();
   }
 
   // Canvas's mic only changes attributes as it starts and stops, which the
@@ -354,7 +348,7 @@ export function voiceChat(host, loadConversations) {
     refresh() {
       listen(on());
       if (!settings.handsFree) stopListening();
-      if (!settings.voiceChat && state !== 'idle') end();
+      if (!settings.voiceChat) end();
     },
     onDomChange() {
       if (listening) onMicChange();
