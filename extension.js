@@ -2068,6 +2068,7 @@ function shortcutList() {
     [`${alt} ↓`, 'Open the next conversation in the sidebar'],
     [`${alt} ⇧ ↓`, 'Open the next conversation that needs you or is unread'],
     [`${alt} N`, 'Start a new chat'],
+    [`${alt} ${isApple() ? '⌫' : 'Delete'}`, 'Delete the open conversation'],
     [`${mod} K`, "Open Canvas's command menu, e.g. to toggle the sidebar"],
     [`${mod} Enter`, "Approve the agent's pending action, in Canvas"],
     [`${mod} ⇧ ${isApple() ? '⌫' : 'Backspace'}`, "Reject the agent's pending action, in Canvas"],
@@ -2163,6 +2164,14 @@ function keyboardShortcuts(host, loadConversations) {
     if (next) open(next.url);
   }
 
+  // Deletes the open conversation, once you confirm, and starts a new chat.
+  async function deleteConversation() {
+    const id = openConversationId();
+    if (!window.confirm('Delete this conversation?')) return;
+    await host.agentServer.request({ path: `/api/conversations/${id}`, method: 'DELETE' });
+    host.navigate('/conversations');
+  }
+
   // Alt+↑, Alt+↓ and Alt+Shift+↓ work in the message box too, so you can move
   // on from a conversation as you write; the others type text there.
   function actionFor(event, inField) {
@@ -2172,6 +2181,9 @@ function keyboardShortcuts(host, loadConversations) {
       if (event.key === 'ArrowUp') return () => openNeighbour(-1);
       if (event.key === 'ArrowDown') return () => openNeighbour(1);
       if (event.code === 'KeyN' && !inField) return () => host.navigate('/conversations');
+      // A Mac's delete key is Backspace.
+      const del = event.key === 'Delete' || (isApple() && event.key === 'Backspace');
+      if (del && !inField && openConversationId()) return deleteConversation;
       return null;
     }
     if (inField) return null;
