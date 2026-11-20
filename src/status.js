@@ -277,10 +277,13 @@ export function watchAgentStatus(host, loadConversations, checks, onRender) {
   }
 
   // Canvas plays its own sound for the open conversation when its sound
-  // notifications are on, so the chime is left to it there.
+  // notifications are on, so the chime is left to it there. Settings that
+  // fail to load count as off, so the chime still plays.
   async function chime(id) {
     if (id === openId) {
-      const canvas = await host.agentServer.request({ path: '/api/settings' });
+      const canvas = await host.agentServer
+        .request({ path: '/api/settings' })
+        .catch(() => null);
       const sound =
         canvas?.enable_sound_notifications ??
         canvas?.misc_settings?.app_preferences?.enable_sound_notifications;

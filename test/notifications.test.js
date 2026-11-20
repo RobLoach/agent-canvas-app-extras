@@ -363,3 +363,15 @@ test("leaves the open conversation's chime to Canvas's own sound when that's on"
   await finish(page, host, A, 'waiting_for_confirmation');
   assert.deepEqual(page.tones, [880, 660]);
 });
+
+test("still chimes for the open conversation when Canvas's settings fail to load", async (t) => {
+  const { page, host } = await watchRun(t, { notificationSounds: true });
+  const request = host.agentServer.request;
+  host.agentServer.request = async (call) => {
+    if (call.path === '/api/settings') throw new Error('Offline');
+    return request(call);
+  };
+  page.hidden = true;
+  await finish(page, host, A, 'waiting_for_confirmation');
+  assert.deepEqual(page.tones, [880, 660]);
+});
