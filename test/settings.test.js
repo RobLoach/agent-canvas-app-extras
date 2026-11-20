@@ -276,6 +276,23 @@ test('shows Show keyboard shortcuts only while they are on', async (t) => {
   assert.equal(button().hidden, false);
 });
 
+test('shows Check for changes every only while a setting that checks is on', async (t) => {
+  const page = setupPage(t, { url: SETTINGS_URL });
+  await openSettings(page);
+  const choice = () =>
+    page.document.querySelector('[data-testid="extras-checkInterval-select"]').parentElement;
+  assert.equal(choice().hidden, true);
+
+  for (const key of ['collapseActivity', 'tabStatus', 'notificationSounds', 'unreadMarkers']) {
+    switchFor(page, key).click();
+    await flush();
+    assert.equal(choice().hidden, false, key);
+    switchFor(page, key).click();
+    await flush();
+    assert.equal(choice().hidden, true, key);
+  }
+});
+
 test('offers how often to check for changes, every 10 seconds by default', async (t) => {
   const page = setupPage(t, { url: SETTINGS_URL });
   await openSettings(page);

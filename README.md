@@ -22,7 +22,7 @@ An [OpenHands](https://www.openhands.dev/) Agent Canvas app that adds a few UI t
 | **Desktop notifications** | Notifies you when the agent finishes or needs you while you're away. |
 | **Notification sounds** | Chimes when the agent needs your confirmation while you're away. |
 | **Unread markers** | Marks the conversations in the sidebar that changed since you last had them open. |
-| **Check for changes every** | How often the settings above ask the Agent Server for changes: from every 5 seconds to every 5 minutes, every 10 seconds by default. |
+| **Check for changes every** | How often the settings above, and **Collapse agent activity**, ask the Agent Server for changes: from every 5 seconds to every 5 minutes, every 10 seconds by default. Shows while one of them is on. |
 
 ### Accessibility
 

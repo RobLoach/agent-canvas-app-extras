@@ -95,6 +95,11 @@ function buildSwitch(item, onChange) {
   return block;
 }
 
+// Whether a setting that checks the Agent Server for changes is on: those
+// following conversation statuses, and unread markers.
+const checking = () =>
+  SWITCHES.some((item) => (item.status || item.key === 'unreadMarkers') && settings[item.key]);
+
 // The app's settings page, as declared in canvas-extension.json, which Canvas
 // serves under /extensions/<app name>/ and links from its sidebar. The link
 // is hidden there and goes under Apps in Customize's menu instead.
@@ -213,6 +218,7 @@ export function watchCustomizeMenu(host) {
 export function settingsPage(host, onChange) {
   let list = null;
   let showShortcutsButton = null;
+  let checkIntervalChoice = null;
   // The settings before Reset, until you undo it or change one.
   let beforeReset = null;
   const change = (next) => {
@@ -229,9 +235,11 @@ export function settingsPage(host, onChange) {
     const groups = SWITCH_GROUPS.map((group) =>
       pageSection(
         group,
-        ...SWITCHES.filter((item) => item.group === group).map((item) =>
-          (item.options ? buildChoice : buildSwitch)(item, change),
-        ),
+        ...SWITCHES.filter((item) => item.group === group).map((item) => {
+          const block = (item.options ? buildChoice : buildSwitch)(item, change);
+          if (item.key === 'checkInterval') checkIntervalChoice = block;
+          return block;
+        }),
         ...(group === 'Chat' ? [showShortcutsButton] : []),
       ),
     );
@@ -256,6 +264,7 @@ export function settingsPage(host, onChange) {
         }),
       );
     }
+    checkIntervalChoice.hidden = !checking();
     list.replaceChildren(...groups, reset);
   }
 
@@ -301,9 +310,11 @@ export function settingsPage(host, onChange) {
 
   return {
     mount,
-    // Show keyboard shortcuts only shows while they're on.
+    // Show keyboard shortcuts only shows while they're on, and Check for
+    // changes every while a setting that checks is.
     refresh() {
       if (showShortcutsButton) showShortcutsButton.hidden = !settings.keyboardShortcuts;
+      if (checkIntervalChoice) checkIntervalChoice.hidden = !checking();
     },
     onStorage(key) {
       if (key === STORAGE_KEY) render();
