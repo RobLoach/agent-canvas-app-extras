@@ -126,7 +126,7 @@ export function setupPage(
     }
   };
 
-  // Records what's read aloud; finishSpeaking() ends the current utterance.
+  // Records what's read aloud; finishSpeaking() reads out what's queued.
   window.SpeechSynthesisUtterance = class {
     constructor(text) {
       this.text = text;
@@ -234,8 +234,9 @@ export function setupPage(
       window.dispatchEvent(new window.Event('focus'));
     },
     async finishSpeaking() {
-      const utterance = window.speechSynthesis.queue.shift();
-      utterance?.onend?.();
+      const queue = window.speechSynthesis.queue;
+      window.speechSynthesis.queue = [];
+      for (const utterance of queue) utterance.onend?.();
       await flush();
     },
     dispose: () => {},

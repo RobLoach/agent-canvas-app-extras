@@ -2557,10 +2557,9 @@ const SILENCE_MS = 1500;
 const QUIET_MS = 10000;
 const MIN_LEVEL = 0.015;
 
-// Replies are cut to this many characters, and read a few sentences at a
-// time, as Chrome stops reading a long utterance after about 15 seconds.
+// Replies are cut to this many characters, and read a sentence at a time,
+// as Chrome stops reading a long utterance after about 15 seconds.
 const MAX_SPOKEN = 1500;
-const CHUNK = 200;
 
 // What's said instead of a reply.
 const SAY = {
@@ -2582,22 +2581,17 @@ function sendButton(mic) {
   return null;
 }
 
-// A reply as speech: Markdown stripped, code left on screen, and split on
-// sentences into chunks.
-function spokenChunks(markdown) {
+// A reply as speech: Markdown stripped, code left on screen, and split into
+// sentences in Canvas's language.
+function spokenSentences(markdown) {
   const text = plainText(
     markdown.replace(/```[\s\S]*?(?:```|$)/g, ' The code is in the chat. '),
     MAX_SPOKEN,
   );
-  const chunks = [];
-  for (const sentence of text.match(/[^.!?…]+[.!?…]*\s*/g) ?? []) {
-    if (chunks.length && chunks.at(-1).length + sentence.length <= CHUNK) {
-      chunks[chunks.length - 1] += sentence;
-    } else {
-      chunks.push(sentence);
-    }
-  }
-  return chunks.map((chunk) => chunk.trim()).filter(Boolean);
+  const sentences = new Intl.Segmenter(canvasLanguage(), { granularity: 'sentence' });
+  return [...sentences.segment(text)]
+    .map(({ segment }) => segment.trim())
+    .filter(Boolean);
 }
 
 // Stops the mic after you stop talking, from its level on a second stream:
@@ -2788,7 +2782,7 @@ function voiceChat(host, loadConversations) {
         .request({ path: `/api/conversations/${current.id}/agent_final_response` })
         .catch(() => null);
       if (state !== 'waiting' || turn !== current) return;
-      speak(spokenChunks(result?.response ?? ''), true);
+      speak(spokenSentences(result?.response ?? ''), true);
     } else if (SAY[status]) {
       speak([SAY[status]], false);
     } else {
@@ -2796,36 +2790,28 @@ function voiceChat(host, loadConversations) {
     }
   }
 
-  // Reads the chunks in turn, then, after a reply, listens again if you're
-  // still looking at the conversation.
-  function speak(chunks, again) {
-    if (!chunks.length || speechProblem()) {
-      if (again) listenAgain();
-      else end();
+  // Queues the sentences to be read, then, after a reply, listens again if
+  // you're still looking at the conversation. end() cancels what's left.
+  function speak(sentences, again) {
+    const done = () => (again ? listenAgain() : end());
+    if (!sentences.length || speechProblem()) {
+      done();
       return;
     }
     state = 'speaking';
     const current = turn;
     const synth = window.speechSynthesis;
-    let index = 0;
-    const next = () => {
-      if (state !== 'speaking' || turn !== current) return;
-      if (index >= chunks.length) {
-        if (again) listenAgain();
-        else end();
-        return;
-      }
-      const utterance = new window.SpeechSynthesisUtterance(chunks[index++]);
-      utterance.lang = canvasLanguage();
-      utterance.onend = next;
-      utterance.onerror = (event) => {
-        if (event?.error === 'interrupted' || event?.error === 'canceled') return;
-        next();
-      };
-      synth.speak(utterance);
-    };
     synth.cancel();
-    next();
+    sentences.forEach((sentence, index) => {
+      const utterance = new window.SpeechSynthesisUtterance(sentence);
+      utterance.lang = canvasLanguage();
+      if (index === sentences.length - 1) {
+        utterance.onend = () => {
+          if (state === 'speaking' && turn === current) done();
+        };
+      }
+      synth.speak(utterance);
+    });
   }
 
   function listenAgain() {

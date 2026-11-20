@@ -68,7 +68,7 @@ test('sends what you said, reads the reply aloud, then listens again', async (t)
   assert.deepEqual(page.sent, ['Run the tests']);
 
   await reply(page, host);
-  assert.deepEqual(page.utterances, ['Done. All tests pass.']);
+  assert.deepEqual(page.utterances, ['Done.', 'All tests pass.']);
   assert.equal(listening(page), false);
 
   await page.finishSpeaking();
@@ -84,20 +84,20 @@ test("doesn't read the last reply before the run for your message starts", async
 
   host.turns[A].leaf = 'e2';
   await page.wait(2000);
-  assert.deepEqual(page.utterances, ['Done. All tests pass.']);
+  assert.deepEqual(page.utterances, ['Done.', 'All tests pass.']);
 });
 
-test('reads a long reply a few sentences at a time, leaving code on screen', async (t) => {
+test('reads a reply a sentence at a time, leaving code on screen', async (t) => {
   const { page, host } = await voiceChat(t);
-  const sentence = 'This sentence is about fifty characters long, ok. ';
-  host.finalResponse = `${sentence.repeat(5)}\n\n\`\`\`js\nrun();\n\`\`\``;
+  host.finalResponse = 'Fixed it, e.g. the tests. Run `npm test`!\n\n```js\nrun();\n```';
   await say(page, 'Explain');
   await reply(page, host);
 
-  assert.equal(page.utterances.length, 1);
-  assert.equal(page.utterances[0], sentence.repeat(4).trim());
-  await page.finishSpeaking();
-  assert.equal(page.utterances[1], `${sentence.trim()} The code is in the chat.`);
+  assert.deepEqual(page.utterances, [
+    'Fixed it, e.g. the tests.',
+    'Run npm test!',
+    'The code is in the chat.',
+  ]);
   assert.equal(listening(page), false);
   await page.finishSpeaking();
   assert.equal(listening(page), true);
