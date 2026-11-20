@@ -85,6 +85,36 @@ test('Alt+N starts a new chat, on any keyboard layout', async (t) => {
   assert.deepEqual(host.navigations, ['/conversations']);
 });
 
+test('Alt+Delete deletes the open conversation once you confirm, and starts a new chat', async (t) => {
+  const { page, host } = await start(t, {
+    path: `/conversations/${A}`,
+    body: BODY,
+    settings: ON,
+  });
+  let answer = false;
+  page.window.confirm = () => answer;
+  press(page, 'Delete', { altKey: true });
+  await flush();
+  assert.deepEqual(host.requests, []);
+  assert.deepEqual(host.navigations, []);
+
+  answer = true;
+  const composer = page.document.querySelector('[data-testid="chat-input"]');
+  assert.equal(press(page, 'Delete', { altKey: true }, composer).defaultPrevented, false);
+  press(page, 'Delete', { altKey: true });
+  await flush();
+  assert.deepEqual(host.requests, [`/api/conversations/${A}`]);
+  assert.deepEqual(host.navigations, ['/conversations']);
+});
+
+test('Alt+Delete does nothing without an open conversation', async (t) => {
+  const { page, host } = await start(t, { body: BODY, settings: ON });
+  page.window.confirm = () => true;
+  assert.equal(press(page, 'Delete', { altKey: true }).defaultPrevented, false);
+  await flush();
+  assert.deepEqual(host.requests, []);
+});
+
 test('leaves keys typed into a field, and ones Canvas handled, alone', async (t) => {
   const { page } = await start(t, { body: BODY, settings: ON });
   const field = page.document.querySelector('textarea');
