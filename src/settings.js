@@ -64,6 +64,13 @@ export const SWITCHES = [
     enable: requestMic,
   },
   {
+    key: 'readAloud',
+    group: 'Voice',
+    label: 'Read aloud buttons',
+    description: "Add a button to the agent's messages that reads them aloud.",
+    check: speechProblem,
+  },
+  {
     key: 'tabStatus',
     group: 'Notifications',
     status: 'count',

@@ -13,6 +13,7 @@ import { settings } from './settings.js';
 // ones Canvas already handled.
 const HELP_ID = 'openhands-extras-shortcuts';
 const COMPOSER = '[data-testid="chat-input"]';
+const MIC = '[data-testid="chat-dictation-button"]';
 const isApple = () => /Mac|iPhone|iPad/.test(window.navigator.platform ?? '');
 const typing = (target) =>
   !!target?.closest?.(
@@ -38,6 +39,7 @@ function shortcutList() {
     [`${alt} ↓`, 'Open the next conversation in the sidebar'],
     [`${alt} ⇧ ↓`, 'Open the next conversation that needs you or is unread'],
     [`${alt} N`, 'Start a new chat'],
+    [`${alt} V`, "Start or stop Canvas's mic"],
     [`${mod} K`, "Open Canvas's command menu, e.g. to toggle the sidebar"],
     [`${mod} Enter`, "Approve the agent's pending action, in Canvas"],
     [`${mod} ⇧ ${isApple() ? '⌫' : 'Backspace'}`, "Reject the agent's pending action, in Canvas"],
@@ -100,6 +102,12 @@ export function keyboardShortcuts(host, loadConversations) {
     selection?.addRange(range);
   }
 
+  // Canvas's mic, when there is one to press, as Voice chat hears it.
+  function toggleMic() {
+    const mic = document.querySelector(MIC);
+    return mic && !mic.disabled ? () => mic.click() : null;
+  }
+
   // The sidebar's conversations, in order, from the open one, by their own
   // links, which carry Canvas's backend.
   function open(url) {
@@ -133,8 +141,9 @@ export function keyboardShortcuts(host, loadConversations) {
     if (next) open(next.url);
   }
 
-  // Alt+↑, Alt+↓ and Alt+Shift+↓ work in the message box too, so you can move
-  // on from a conversation as you write; the others type text there.
+  // Alt+↑, Alt+↓, Alt+Shift+↓ and Alt+V work in the message box too, so you
+  // can move on from a conversation, or talk, as you write; the others type
+  // text there.
   function actionFor(event, inField) {
     if (event.ctrlKey || event.metaKey) return null;
     if (event.altKey) {
@@ -142,6 +151,7 @@ export function keyboardShortcuts(host, loadConversations) {
       if (event.key === 'ArrowUp') return () => openNeighbour(-1);
       if (event.key === 'ArrowDown') return () => openNeighbour(1);
       if (event.code === 'KeyN' && !inField) return () => host.navigate('/conversations');
+      if (event.code === 'KeyV') return toggleMic();
       return null;
     }
     if (inField) return null;

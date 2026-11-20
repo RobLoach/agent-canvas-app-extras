@@ -5,7 +5,12 @@ import { A, B, flush, openSettings, setupPage, start } from './helpers.js';
 // Canvas's message box with its mic, which toggles as Canvas's does, and its
 // send button, which sends your message and starts a run.
 const CHAT = `
+  <article data-testid="agent-message">
+    <div class="absolute hidden"><button type="button" aria-label="Copy">Copy</button></div>
+    <div><h2>Done</h2><p>Fixed the bug. All tests pass</p><pre><code>npm test</code></pre><ul><li>One file</li></ul></div>
+  </article>
   <div>
+    <button type="button" data-testid="stop-button">Stop</button>
     <div data-testid="chat-input" contenteditable="true"></div>
     <div>
       <button type="button" data-testid="chat-dictation-button" aria-pressed="false" aria-busy="false"></button>
@@ -215,4 +220,105 @@ test("reads the reply in one go when Canvas's language isn't one the browser kno
   await reply(page, host);
 
   assert.deepEqual(page.utterances, ['Done. All tests pass.']);
+});
+
+test('"Never mind" clears what you said instead of sending it', async (t) => {
+  const { page } = await voiceChat(t);
+  await say(page, 'Never mind.');
+  await page.wait(5000);
+
+  assert.deepEqual(page.sent, []);
+  assert.equal(page.document.querySelector('[data-testid="chat-input"]').textContent, '');
+  assert.deepEqual(page.utterances, []);
+});
+
+test('"Stop" presses Canvas\'s Stop', async (t) => {
+  const { page } = await voiceChat(t);
+  let stopped = 0;
+  page.document
+    .querySelector('[data-testid="stop-button"]')
+    .addEventListener('click', () => (stopped += 1));
+  await say(page, 'Stop!');
+
+  assert.equal(stopped, 1);
+  assert.deepEqual(page.sent, []);
+  assert.deepEqual(page.utterances, ['Stopped.']);
+  await page.finishSpeaking();
+  assert.equal(listening(page), false);
+});
+
+test('"Repeat that" reads the last reply again, then listens', async (t) => {
+  const { page } = await voiceChat(t);
+  await say(page, 'Repeat that');
+
+  assert.deepEqual(page.sent, []);
+  assert.deepEqual(page.utterances, ['Done.', 'All tests pass.']);
+  await page.finishSpeaking();
+  assert.equal(listening(page), true);
+});
+
+test('"New chat" opens one', async (t) => {
+  const { page, host } = await voiceChat(t);
+  await say(page, 'New chat');
+
+  assert.deepEqual(host.navigations, ['/conversations']);
+  assert.deepEqual(page.utterances, ['New chat.']);
+});
+
+test('keeps the screen awake while a turn goes', async (t) => {
+  const { page, host } = await voiceChat(t);
+  await say(page, 'Run the tests');
+  assert.equal(page.wakeLocks, 1);
+
+  await reply(page, host);
+  page.window.dispatchEvent(new page.window.KeyboardEvent('keydown', { key: 'Escape' }));
+  await flush();
+  assert.equal(page.wakeLocks, 0);
+});
+
+test('Alt+V presses the mic, from the message box too', async (t) => {
+  const { page } = await voiceChat(t, { keyboardShortcuts: true });
+  const composer = page.document.querySelector('[data-testid="chat-input"]');
+  const event = new page.window.KeyboardEvent('keydown', {
+    key: '√',
+    code: 'KeyV',
+    altKey: true,
+    bubbles: true,
+    cancelable: true,
+  });
+  composer.dispatchEvent(event);
+
+  assert.equal(event.defaultPrevented, true);
+  assert.equal(listening(page), true);
+});
+
+const readAloud = (page) => page.document.querySelector('[data-extras-read-aloud]');
+
+test("Read aloud buttons read the agent's messages, leaving code on screen", async (t) => {
+  const { page } = await voiceChat(t, { readAloud: true });
+  const button = readAloud(page);
+  assert.equal(button.getAttribute('aria-label'), 'Read aloud');
+  assert.equal(button.parentElement, page.document.querySelector('article > div.absolute'));
+
+  button.click();
+  assert.deepEqual(page.utterances, [
+    'Done',
+    'Fixed the bug.',
+    'All tests pass',
+    'The code is in the chat.',
+    'One file',
+  ]);
+  assert.equal(button.getAttribute('aria-label'), 'Stop reading');
+
+  button.click();
+  assert.equal(page.window.speechSynthesis.queue.length, 0);
+  assert.equal(button.getAttribute('aria-label'), 'Read aloud');
+});
+
+test('Read aloud buttons go when turned off', async (t) => {
+  const { page } = await voiceChat(t, { readAloud: true });
+  assert.ok(readAloud(page));
+  await page.changeSettings({ readAloud: false });
+
+  assert.equal(readAloud(page), null);
 });

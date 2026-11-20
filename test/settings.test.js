@@ -38,6 +38,7 @@ const SWITCH_KEYS = [
   'keyboardShortcuts',
   'voiceChat',
   'handsFree',
+  'readAloud',
   'tabStatus',
   'notifications',
   'notificationSounds',

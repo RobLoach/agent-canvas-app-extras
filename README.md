@@ -12,14 +12,15 @@ An [OpenHands](https://www.openhands.dev/) Agent Canvas app that adds a few UI t
 | **Focused new chat** | Hides the new chat page's "What do you want to work on?" heading and tagline. |
 | **Collapse agent activity** | Folds "Running" and "Reading" chat entries into expandable "Thinking" entries. |
 | **Responsive tables** | Stacks a table's rows when it's too wide for the chat. |
-| **Keyboard shortcuts** | <kbd>?</kbd> lists them, <kbd>/</kbd> focuses the message box, <kbd>Alt</kbd>+<kbd>↑</kbd>/<kbd>↓</kbd> open the previous or next conversation and <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>↓</kbd> the next one waiting for your confirmation or unread, even from the message box, and <kbd>Alt</kbd>+<kbd>N</kbd> starts a new chat. Canvas's own <kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>K</kbd> menu covers the rest. |
+| **Keyboard shortcuts** | <kbd>?</kbd> lists them, <kbd>/</kbd> focuses the message box, <kbd>Alt</kbd>+<kbd>↑</kbd>/<kbd>↓</kbd> open the previous or next conversation and <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>↓</kbd> the next one waiting for your confirmation or unread, even from the message box, <kbd>Alt</kbd>+<kbd>N</kbd> starts a new chat, and <kbd>Alt</kbd>+<kbd>V</kbd> starts or stops Canvas's mic. Canvas's own <kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>K</kbd> menu covers the rest. |
 
 ### Voice
 
 | Name | What it does |
 | :-- | :-- |
-| **Voice chat** | After you speak a message with Canvas's mic, sends it, reads the agent's reply aloud, then turns the mic back on for your next message. Code stays in the chat rather than being read out, and it tells you when the agent needs your confirmation or stops with an error. Pressing a key or opening another conversation stops it. |
+| **Voice chat** | After you speak a message with Canvas's mic, sends it, reads the agent's reply aloud, then turns the mic back on for your next message, keeping a phone's screen awake meanwhile. Code stays in the chat rather than being read out, and it tells you when the agent needs your confirmation or stops with an error. Say "stop" to press Canvas's Stop, "never mind" to send nothing, "repeat that" to hear the last reply again, or "new chat" to start one. Pressing a key or opening another conversation stops it. |
 | **Hands-free** | Stops Canvas's mic once you stop talking, or after 10 seconds of silence, so with Voice chat you never have to tap it. |
+| **Read aloud buttons** | Adds a button beside the copy button on the agent's messages that reads the message aloud, or stops reading it. <kbd>Esc</kbd> stops it too. |
 
 ### Notifications
 

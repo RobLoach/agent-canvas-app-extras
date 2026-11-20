@@ -52,6 +52,8 @@ export function setupPage(
     micLevel: 0,
     micStreams: 0,
     micAnswer: true,
+    // Screen wake locks held.
+    wakeLocks: 0,
   };
 
   Object.defineProperty(window.document, 'hidden', { get: () => page.hidden });
@@ -148,6 +150,21 @@ export function setupPage(
       for (const utterance of queue) utterance.onerror?.({ error: 'canceled' });
     },
   };
+
+  Object.defineProperty(window.navigator, 'wakeLock', {
+    value: {
+      async request() {
+        page.wakeLocks += 1;
+        let held = true;
+        return {
+          async release() {
+            if (held) page.wakeLocks -= 1;
+            held = false;
+          },
+        };
+      },
+    },
+  });
 
   Object.defineProperty(window.navigator, 'mediaDevices', {
     value: {
