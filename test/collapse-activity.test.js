@@ -147,9 +147,19 @@ test("uses Canvas's translations for the page's language", async (t) => {
   await activateExtension(page, fakeHost());
   await flush();
 
-  assert.deepEqual(fetched, ['/locales/de/openhands.json']);
+  assert.deepEqual(fetched, ['https://canvas.test/locales/de/openhands.json']);
   // English stays the fallback for titles German doesn't translate.
   assert.deepEqual(shown(page), ['Denkt nach']);
+});
+
+test("fetches translations under Canvas's base path", async (t) => {
+  const page = openChat(t, [item(row('Running <strong>ls</strong>'))]);
+  page.document.documentElement.lang = 'fr';
+  page.window.__reactRouterContext = { basename: '/canvas/' };
+  await activateExtension(page, fakeHost());
+  await flush();
+
+  assert.deepEqual(page.fetched, ['https://canvas.test/canvas/locales/fr/openhands.json']);
 });
 
 test('leaves the chat alone while off, and restores it when disabled', async (t) => {

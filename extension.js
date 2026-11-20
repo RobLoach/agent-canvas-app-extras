@@ -125,8 +125,8 @@ const openConversationId = () => {
 const away = () => document.hidden || !document.hasFocus();
 
 // Canvas keeps its UI language on <html lang>, and its translations at
-// /locales, which are fetched once per language. A failed fetch gives none,
-// leaving the English.
+// /locales under its base path, which are fetched once per language. A failed
+// fetch gives none, leaving the English.
 const canvasLanguage = () => document.documentElement.lang || 'en';
 const translations = new Map();
 
@@ -134,7 +134,10 @@ function canvasTranslations(language) {
   if (!translations.has(language)) {
     translations.set(
       language,
-      fetch(`/locales/${encodeURIComponent(language)}/openhands.json`)
+      fetch(
+        new URL(`locales/${encodeURIComponent(language)}/openhands.json`, canvasBase())
+          .href,
+      )
         .then((response) => (response.ok ? response.json() : {}))
         .catch(() => ({})),
     );

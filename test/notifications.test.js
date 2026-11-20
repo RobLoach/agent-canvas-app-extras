@@ -341,7 +341,7 @@ test("says the status in Canvas's language", async (t) => {
       'Got stuck',
     ],
   );
-  assert.deepEqual(fetched, ['/locales/de/openhands.json'], 'fetched once');
+  assert.deepEqual(fetched, ['https://canvas.test/locales/de/openhands.json'], 'fetched once');
 });
 
 test("leaves the open conversation's chime to Canvas's own sound when that's on", async (t) => {
