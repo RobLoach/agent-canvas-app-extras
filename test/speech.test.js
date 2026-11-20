@@ -17,6 +17,7 @@ const SAMANTHA = voice('Samantha (Enhanced)', 'en-US', {
   voiceURI: 'com.apple.voice.enhanced.en-US.Samantha',
 });
 const DANIEL = voice('Daniel', 'en-GB');
+const ZIRA = voice('Microsoft Zira - English (United States)', 'en-US');
 const ESPEAK = voice('English (America)', 'en-US');
 const NOVELTY = voice('Bad News', 'en-US');
 const FRENCH = voice('Thomas', 'fr-FR');
@@ -59,24 +60,23 @@ const voiceChoices = (page) =>
       : child.textContent,
   );
 
-test("lists the browser's English voices by region, best first, without novelty ones", async (t) => {
+test("lists the browser's English voices, the rated ones by region, best first, without novelty ones", async (t) => {
   const page = await settingsPage(t);
 
   assert.deepEqual(voiceChoices(page), [
     'Automatic (best available)',
     ['English (United States)', ['Emma · very high · online', 'Samantha · normal']],
-    ['English (United Kingdom)', ['Daniel · low']],
-    ['Other voices', ['English (America)']],
+    ['Other voices', ['English (America)', 'Daniel']],
   ]);
 });
 
 test('lists voices the browser finds after the page loads', async (t) => {
   const page = await settingsPage(t);
-  await page.setVoices([DANIEL]);
+  await page.setVoices([ZIRA]);
 
   assert.deepEqual(voiceChoices(page), [
     'Automatic (best available)',
-    ['English (United Kingdom)', ['Daniel · low']],
+    ['English (United States)', ['Zira · normal']],
   ]);
 });
 
@@ -113,6 +113,13 @@ test('reads with the best rated voice by default', async (t) => {
 
   assert.equal(utterance.voice, EMMA);
   assert.equal(utterance.rate, 1);
+});
+
+test("picks the best voice Chrome preloads, over the system's", async (t) => {
+  const google = voice('Google US English', 'en-US', { localService: false });
+  const utterance = await readMessage(t, {}, [ESPEAK, DANIEL, google]);
+
+  assert.equal(utterance.voice, google);
 });
 
 test('reads with the chosen voice and speed', async (t) => {

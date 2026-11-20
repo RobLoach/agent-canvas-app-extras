@@ -1,6 +1,6 @@
 // Builds src/voices-en.js from Readium Speech's recommended voices, at the
-// commit below: npm run voices. Only what Extras uses is kept, so the bundle
-// stays small.
+// commit below: npm run voices. Only the voices and details Extras uses are
+// kept, so the bundle stays small.
 import { writeFile } from 'node:fs/promises';
 
 const READIUM = 'https://raw.githubusercontent.com/readium/speech';
@@ -17,8 +17,29 @@ const [english, novelty, veryLow, license] = await Promise.all([
   json('filters/veryLowQuality.json'),
   fetch(`${READIUM}/${COMMIT}/LICENSE`).then((response) => response.text()),
 ]);
+// Only the highest rated voices, but children's ones, and the best each
+// other platform preloads, so Automatic still finds one there: Chrome on
+// desktop, Apple's and Windows'. The rest are listed as other voices.
+const TOP = 10;
+const PLATFORM_BEST = [
+  'Google US English',
+  'Samantha',
+  'Microsoft Zira - English (United States)',
+  'Microsoft Mark - English (United States)',
+];
+const RANKS = { veryLow: 0, low: 1, normal: 2, high: 3, veryHigh: 4 };
+const best = (voice) => Math.max(...voice.quality.map((quality) => RANKS[quality]));
+// Readium lists each quality's voices best first, which a stable sort keeps.
+const top = english.voices
+  .filter((voice) => !voice.children)
+  .sort((a, b) => best(b) - best(a))
+  .slice(0, TOP);
+const kept = english.voices.filter(
+  (voice) => top.includes(voice) || PLATFORM_BEST.includes(voice.name),
+);
+
 const names = (voice) => [voice.name, ...(voice.altNames ?? []), ...(voice.nativeID ?? [])];
-const voices = english.voices.map((voice) => ({
+const voices = kept.map((voice) => ({
   names: names(voice),
   label: voice.label,
   language: voice.language,
