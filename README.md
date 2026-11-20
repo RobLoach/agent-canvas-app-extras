@@ -51,6 +51,7 @@ Extras is checked against OpenHands 1.40. It needs a local Agent Server, as Canv
    ```
    github:RobLoach/agent-canvas-app-extras
    ```
+   The form also takes an optional ref: leave it empty to follow `master`, or enter a release tag such as `v0.17.0` to pin that version.
 4. Click **Install**
 5. **Enable** the Extras app
 6. Open **Customize > Extras**, under Apps, and turn on the features you want, or click **Reset settings** to put them all back
@@ -75,6 +76,13 @@ npm test
 ```
 
 GitHub Actions runs them on every pull request and push to `master`.
+
+### Releases
+
+1. Bump `"version"` in [`canvas-extension.json`](canvas-extension.json)
+2. Merge it to `master`
+
+Once the tests pass, GitHub Actions tags `v<version>` and publishes a release, whose generated notes are the changelog.
 
 ## License
 
