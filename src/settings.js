@@ -2,7 +2,7 @@
 
 import { installProblem } from './canvas.js';
 import { readJson, STORAGE_KEY, writeJson } from './storage.js';
-import { unlockAudio } from './audio.js';
+import { requestMic, speechProblem, unlockAudio } from './audio.js';
 import {
   notificationProblem,
   requestNotificationPermission,
@@ -15,7 +15,7 @@ import {
 // status is 'follow' for a feature that needs conversation statuses, and
 // 'count' for one that also needs how many conversations need your input.
 // The settings page lists them under their group, in this order.
-export const SWITCH_GROUPS = ['Chat', 'Notifications', 'Accessibility', 'Phone and app'];
+export const SWITCH_GROUPS = ['Chat', 'Voice', 'Notifications', 'Accessibility', 'Phone and app'];
 export const SWITCHES = [
   {
     key: 'wideChat',
@@ -47,6 +47,21 @@ export const SWITCHES = [
     group: 'Chat',
     label: 'Keyboard shortcuts',
     description: 'Switch conversations and start chats from the keyboard. Press ? to list them.',
+  },
+  {
+    key: 'voiceChat',
+    group: 'Voice',
+    label: 'Voice chat',
+    description:
+      "After you use the mic, send your message, read the agent's reply aloud, then listen again.",
+    check: speechProblem,
+  },
+  {
+    key: 'handsFree',
+    group: 'Voice',
+    label: 'Hands-free',
+    description: 'Stop the mic once you stop talking, so you never have to tap it.',
+    enable: requestMic,
   },
   {
     key: 'tabStatus',

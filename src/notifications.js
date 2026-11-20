@@ -22,7 +22,7 @@ export async function requestNotificationPermission() {
 
 // Final responses are Markdown, which notifications show as raw text. Strip
 // the syntax and cut on a word boundary without splitting an emoji.
-function plainText(markdown, max = 200) {
+export function plainText(markdown, max = 200) {
   const text = markdown
     .replace(/```[\s\S]*?(?:```|$)/g, ' ')
     .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')

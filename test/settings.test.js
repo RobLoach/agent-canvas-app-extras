@@ -36,6 +36,8 @@ const SWITCH_KEYS = [
   'responsiveTables',
   'collapseActivity',
   'keyboardShortcuts',
+  'voiceChat',
+  'handsFree',
   'tabStatus',
   'notifications',
   'notificationSounds',
@@ -86,7 +88,7 @@ test('lists every switch under its group on the settings page, beside Customize'
   await openSettings(page, host);
 
   const headings = [...page.document.querySelectorAll('h3')].map((h) => h.textContent);
-  assert.deepEqual(headings, ['Chat', 'Notifications', 'Accessibility', 'Phone and app']);
+  assert.deepEqual(headings, ['Chat', 'Voice', 'Notifications', 'Accessibility', 'Phone and app']);
   for (const key of SWITCH_KEYS) {
     assert.equal(switchFor(page, key).checked, false, key);
     assert.ok(hintFor(page, key), `${key} has a description`);

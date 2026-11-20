@@ -3,7 +3,7 @@
   "name": "agent-canvas-app-extras",
   "display_name": "Extras",
   "version": "0.17.0",
-  "description": "Agent status in your tab and app icon, notifications, unread markers, keyboard shortcuts, a quieter chat and more.",
+  "description": "Agent status in your tab and app icon, notifications, unread markers, keyboard shortcuts, voice chat, a quieter chat and more.",
   "entrypoint": "extension.js",
   "contributes": {
     "pages": [

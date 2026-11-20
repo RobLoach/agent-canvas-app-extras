@@ -46,6 +46,12 @@ export function setupPage(
     tones: [],
     badge: undefined,
     audioClosed: false,
+    // What the app read aloud, still reading or done, and the mic's level
+    // and open streams, for Voice chat and Hands-free.
+    utterances: [],
+    micLevel: 0,
+    micStreams: 0,
+    micAnswer: true,
   };
 
   Object.defineProperty(window.document, 'hidden', { get: () => page.hidden });
@@ -98,6 +104,17 @@ export function setupPage(
       const ramp = () => {};
       return { gain: { setValueAtTime: ramp, exponentialRampToValueAtTime: ramp }, connect: (node) => node };
     }
+    createAnalyser() {
+      return {
+        fftSize: 0,
+        getFloatTimeDomainData(samples) {
+          samples.fill(page.micLevel);
+        },
+      };
+    }
+    createMediaStreamSource() {
+      return { connect: (node) => node };
+    }
     createOscillator() {
       const oscillator = {
         frequency: {},
@@ -108,6 +125,49 @@ export function setupPage(
       return oscillator;
     }
   };
+
+  // Records what's read aloud; finishSpeaking() ends the current utterance.
+  window.SpeechSynthesisUtterance = class {
+    constructor(text) {
+      this.text = text;
+    }
+  };
+  window.speechSynthesis = {
+    queue: [],
+    get speaking() {
+      return this.queue.length > 0;
+    },
+    pending: false,
+    speak(utterance) {
+      page.utterances.push(utterance.text);
+      this.queue.push(utterance);
+    },
+    cancel() {
+      const queue = this.queue;
+      this.queue = [];
+      for (const utterance of queue) utterance.onerror?.({ error: 'canceled' });
+    },
+  };
+
+  Object.defineProperty(window.navigator, 'mediaDevices', {
+    value: {
+      async getUserMedia() {
+        if (!page.micAnswer) throw new Error('NotAllowedError');
+        page.micStreams += 1;
+        let live = true;
+        return {
+          getTracks: () => [
+            {
+              stop() {
+                if (live) page.micStreams -= 1;
+                live = false;
+              },
+            },
+          ],
+        };
+      },
+    },
+  });
 
   Object.assign(globalThis, {
     window,
@@ -173,6 +233,11 @@ export function setupPage(
       window.document.dispatchEvent(new window.Event('visibilitychange'));
       window.dispatchEvent(new window.Event('focus'));
     },
+    async finishSpeaking() {
+      const utterance = window.speechSynthesis.queue.shift();
+      utterance?.onend?.();
+      await flush();
+    },
     dispose: () => {},
   });
   if (settings) page.settings(settings);
@@ -188,6 +253,8 @@ export function fakeHost({
   statuses = {},
   titles = {},
   updated = {},
+  // Each conversation's last message from you and its latest event, by id.
+  turns = {},
   finalResponse = '',
 } = {}) {
   const host = {
@@ -198,6 +265,8 @@ export function fakeHost({
     titles,
     // Each conversation's update time, as the ISO string the server gives.
     updated,
+    turns,
+    finalResponse,
     requests: [],
     navigations: [],
     // Each registered page's mount, by id.
@@ -212,7 +281,7 @@ export function fakeHost({
         host.requests.push(path);
         const url = new URL(path, 'https://agent.test');
         if (url.pathname.endsWith('/agent_final_response')) {
-          return { response: finalResponse };
+          return { response: host.finalResponse };
         }
         // GET /api/conversations/count?status=…, over every conversation.
         if (url.pathname.endsWith('/count')) {
@@ -224,6 +293,8 @@ export function fakeHost({
           execution_status: host.statuses[id] ?? 'idle',
           title: host.titles[id] ?? null,
           updated_at: host.updated[id] ?? null,
+          last_user_message_id: host.turns[id]?.user ?? null,
+          leaf_event_id: host.turns[id]?.leaf ?? null,
         }));
       },
     },
@@ -251,10 +322,10 @@ export async function activateExtension(page, host) {
 // conversations. before(page) sets the page up first, e.g. its storage.
 export async function start(
   t,
-  { path = '/apps', statuses, titles, updated, finalResponse, before, ...pageOptions } = {},
+  { path = '/apps', statuses, titles, updated, turns, finalResponse, before, ...pageOptions } = {},
 ) {
   const page = setupPage(t, { url: `https://canvas.test${path}`, ...pageOptions });
-  const host = fakeHost({ statuses, titles, updated, finalResponse });
+  const host = fakeHost({ statuses, titles, updated, turns, finalResponse });
   before?.(page);
   await activateExtension(page, host);
   return { page, host };

@@ -1,6 +1,6 @@
 # Agent Canvas App: Extras
 
-An [OpenHands](https://www.openhands.dev/) Agent Canvas app that adds a few UI tweaks: agent status in your browser tab and app icon, desktop notifications, unread markers, keyboard shortcuts, and a quieter chat.
+An [OpenHands](https://www.openhands.dev/) Agent Canvas app that adds a few UI tweaks: agent status in your browser tab and app icon, desktop notifications, unread markers, keyboard shortcuts, voice chat, and a quieter chat.
 
 ## Features
 
@@ -13,6 +13,13 @@ An [OpenHands](https://www.openhands.dev/) Agent Canvas app that adds a few UI t
 | **Collapse agent activity** | Folds "Running" and "Reading" chat entries into expandable "Thinking" entries. |
 | **Responsive tables** | Stacks a table's rows when it's too wide for the chat. |
 | **Keyboard shortcuts** | <kbd>?</kbd> lists them, <kbd>/</kbd> focuses the message box, <kbd>Alt</kbd>+<kbd>↑</kbd>/<kbd>↓</kbd> open the previous or next conversation and <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>↓</kbd> the next one waiting for your confirmation or unread, even from the message box, and <kbd>Alt</kbd>+<kbd>N</kbd> starts a new chat. Canvas's own <kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>K</kbd> menu covers the rest. |
+
+### Voice
+
+| Name | What it does |
+| :-- | :-- |
+| **Voice chat** | After you speak a message with Canvas's mic, sends it, reads the agent's reply aloud, then turns the mic back on for your next message. Code stays in the chat rather than being read out, and it tells you when the agent needs your confirmation or stops with an error. Pressing a key or opening another conversation stops it. |
+| **Hands-free** | Stops Canvas's mic once you stop talking, or after 10 seconds of silence, so with Voice chat you never have to tap it. |
 
 ### Notifications
 
@@ -62,6 +69,7 @@ Feel free to propose more features in the issue queue.
 - The app's source is in [`src/`](src), one module per feature, from [`src/index.js`](src/index.js). Canvas loads an app from one file, so `npm run build` bundles them with Rollup into [`extension.js`](extension.js), which is checked in. `npm test` builds it first, and CI checks it matches `src/`.
 - The settings page is an app page, which Canvas serves at `/extensions/agent-canvas-app-extras/settings`, as it has no way for an app to add a page under Customize. The app adds the settings page to Customize's menu itself, and hides its own sidebar link.
 - Canvas has no app API for settings, tab titles or page styles yet. The app works with Canvas's markup directly (its app card, chat, sidebar and title), so an OpenHands update that changes it can break a feature.
+- Voice chat reads replies with the browser's own voices (`speechSynthesis`), so nothing leaves your machine beyond what Canvas's mic already sends. While it waits for a reply it asks the Agent Server about that one conversation every 2 seconds. Hands-free opens a second stream from the mic to hear when you've stopped talking, as Canvas's mic gives no sign of it.
 - Settings, runs that ended while you were away, what you've read and the conversation you're looking at are kept in the browser's `localStorage`, under `openhands-extras:settings`, `:unseen`, `:read` and `:viewing`, so they're per browser rather than per backend.
 - While a feature that needs conversation statuses is on, the app asks the Agent Server for them, and for unread markers, in one request when the chat changes, at most once per **Check for changes every**, and that often while a run is going or for the counts and unread markers. Unread markers asks about every conversation in the sidebar at most once a minute, as the Agent Server sends each one's whole history of costs, and in between only about new ones. Nothing is requested while those features are off, and unread markers rest while the tab is hidden.
 

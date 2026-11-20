@@ -35,6 +35,7 @@ import {
   watchCustomizeMenu,
 } from './pages.js';
 import { keyboardShortcuts } from './shortcuts.js';
+import { voiceChat } from './voice.js';
 
 // The running copy's dispose, on the page's window. Canvas disposes an app
 // before activating it again; should a copy still be running anyway, the new
@@ -93,6 +94,7 @@ export function activate(host) {
     installableApp(host),
     collapseActivity,
     keyboardShortcuts(host, loadConversations),
+    voiceChat(host, loadConversations),
   ];
   function each(method, ...args) {
     for (const feature of features) feature[method]?.(...args);
