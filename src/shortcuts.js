@@ -142,8 +142,9 @@ export function keyboardShortcuts(host, loadConversations) {
     host.navigate('/conversations');
   }
 
-  // Alt+↑, Alt+↓ and Alt+Shift+↓ work in the message box too, so you can move
-  // on from a conversation as you write; the others type text there.
+  // Alt+↑, Alt+↓, Alt+Shift+↓ and Alt+Delete work in the message box too, so
+  // you can move on from a conversation as you write; the others type text
+  // there.
   function actionFor(event, inField) {
     if (event.ctrlKey || event.metaKey) return null;
     if (event.altKey) {
@@ -151,9 +152,9 @@ export function keyboardShortcuts(host, loadConversations) {
       if (event.key === 'ArrowUp') return () => openNeighbour(-1);
       if (event.key === 'ArrowDown') return () => openNeighbour(1);
       if (event.code === 'KeyN' && !inField) return () => host.navigate('/conversations');
-      // A Mac's delete key is Backspace.
-      const del = event.key === 'Delete' || (isApple() && event.key === 'Backspace');
-      if (del && !inField && openConversationId()) return deleteConversation;
+      // A Mac's delete key is Backspace, though ⌥⌫ deletes a word in a field.
+      const del = event.key === 'Delete' || (isApple() && event.key === 'Backspace' && !inField);
+      if (del && openConversationId()) return deleteConversation;
       return null;
     }
     if (inField) return null;
