@@ -99,9 +99,21 @@ test('Alt+Delete deletes the open conversation once you confirm, and starts a ne
   assert.deepEqual(host.navigations, []);
 
   answer = true;
-  const composer = page.document.querySelector('[data-testid="chat-input"]');
-  assert.equal(press(page, 'Delete', { altKey: true }, composer).defaultPrevented, false);
   press(page, 'Delete', { altKey: true });
+  await flush();
+  assert.deepEqual(host.requests, [`/api/conversations/${A}`]);
+  assert.deepEqual(host.navigations, ['/conversations']);
+});
+
+test('Alt+Delete works from the message box too', async (t) => {
+  const { page, host } = await start(t, {
+    path: `/conversations/${A}`,
+    body: BODY,
+    settings: ON,
+  });
+  page.window.confirm = () => true;
+  const composer = page.document.querySelector('[data-testid="chat-input"]');
+  assert.ok(press(page, 'Delete', { altKey: true }, composer).defaultPrevented);
   await flush();
   assert.deepEqual(host.requests, [`/api/conversations/${A}`]);
   assert.deepEqual(host.navigations, ['/conversations']);
